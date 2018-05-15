@@ -56,4 +56,3 @@ stages:
         combined_model: {stages: 'makews', output: workspace, unwrap: true}
         hepdata_submission: '{workdir}/submission.zip'
       step: {$ref: steps.yml#/hepdata}
-
