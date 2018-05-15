@@ -1,0 +1,25 @@
+stages:
+  - name: run_mc
+    dependencies: [init]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+
+        nevents: {stages: init, output:  nevents, unwrap: true}
+        mcname: {stages: init, output:  mcname, unwrap: true}
+        mcweight: {stages: init, output:  mcweight, unwrap: true}
+
+        weightvariations: [nominal,weight_var1_up,weight_var1_dn]
+        shapevars: [[shape_conv_up],[shape_conv_dn]]
+      workflow: {$ref: workflow_mc.yml}
+      scatter:
+        method: zip
+        parameters: [mcname,mcweight]
+  - name: merge
+    dependencies: [run_mc]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        inputs: {stages: 'run_mc[*].mergeallvars', output: mergedfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}

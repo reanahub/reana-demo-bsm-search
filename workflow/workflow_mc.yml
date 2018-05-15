@@ -1,0 +1,109 @@
+stages:
+  - name: read
+    dependencies: [init]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        nevents: {stages: init, output: nevents, unwrap: true}
+        outputfile: '{workdir}/output_one.root'
+        type: {stages: init, output: mcname, unwrap: true}
+      step: {$ref: steps.yml#/generate}
+      scatter:
+        method: zip
+        parameters: [nevents]
+
+  - name: merge
+    dependencies: [read]
+    scheduler:
+      scheduler_type: multistep-stage
+      batchsize: 2
+      parameters:
+        inputs: {stages: 'read', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+      scatter:
+        method: zip
+        parameters: [inputs]
+
+  - name: select_signal_shapevars
+    dependencies: [merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'merge', output: mergedfile}
+        shapevar: {stages: init, output: shapevars, unwrap: true}
+        mcname:  {stages: init, output: mcname, unwrap: true}
+        mcweight: {stages: init, output: mcweight, unwrap: true}
+      workflow: {$ref: 'workflow_select_shape.yml'}
+      scatter:
+        method: zip
+        parameters: [shapevar]
+
+  - name: select_signal
+    dependencies: [merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'merge', output: mergedfile}
+        outputfile: '{workdir}/select_signal.root'
+        region: signal
+        variations: {stages: init, output: weightvariations, unwrap: true}
+      step: {$ref: steps.yml#/select_mc}
+      scatter:
+        method: zip
+        parameters: [inputfile]
+
+  - name: select_signal_merge
+    dependencies: [select_signal]
+    scheduler:
+      scheduler_type: multistep-stage
+      batchsize: 2
+      parameters:
+        inputs: {stages: 'select_signal', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+      scatter:
+        method: zip
+        parameters: [inputs]
+
+  - name: select_signal_hist
+    dependencies: [select_signal_merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'select_signal_merge', output: mergedfile}
+        outputfile: '{workdir}/hist.root'
+        name: {stages: init, output: mcname, unwrap: true}
+        weight: {stages: init, output: mcweight, unwrap: true}
+        variations: {stages: init, output: weightvariations, unwrap: true}
+      step: {$ref: steps.yml#/histogram}
+      scatter:
+        method: zip
+        parameters: [inputfile]
+
+  - name: mergeweights
+    dependencies: [select_signal_hist]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        inputs: {stages: 'select_signal_hist', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+
+  - name: mergeshapes
+    dependencies: [select_signal_shapevars]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        inputs: {stages: 'select_signal_shapevars[*].hist', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+
+  - name: mergeallvars
+    dependencies: [mergeweights,mergeshapes]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        inputs: {stages: 'mergeweights,mergeshapes', output: mergedfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}

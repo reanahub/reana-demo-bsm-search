@@ -1,0 +1,59 @@
+stages:
+  - name: all_bkg_mc
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        mcname: [mc1,mc2]
+        mcweight: [0.01875,0.0125]  # [Ndata / Ngen * 0.2 * 0.15,  Ndata / Ngen * 0.2 * 0.1] = [10/16*0.03, 1/16 * 0.02]
+        nevents:  [20000,20000,20000,20000,20000,20000,20000,20000]  #160k events / mc sample
+      workflow: {$ref: wflow_all_mc.yml}
+  - name: data
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        nevents: [10000,10000,10000,10000,10000,10000,10000,10000,10000,10000]
+      workflow: {$ref: workflow_data.yml}
+  - name: signal
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        nevents: [20000,20000,20000,20000]
+        mcweight: 0.0025 #Ndata / Ngen * 0.2 * 0.1] = [100/80 * 0.2 * 0.05]
+      workflow: {$ref: workflow_sig.yml}
+  - name: merge
+    dependencies: [all_bkg_mc,data,signal]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        background: {stages: 'all_bkg_mc[*].merge', output: mergedfile, unwrap: true}
+        data: {stages: 'data[*].mergeall', output: mergedfile, unwrap: true}
+        signal: {stages: 'signal[*].hist_merge', output: mergedfile, unwrap: true}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root_allpars}
+  - name: makews
+    dependencies: [merge]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        data_bkg_hists: {stages: 'merge', output: mergedfile, unwrap: true}
+        workspace_prefix: '{workdir}/results/workspace'
+        xml_dir: '{workdir}/xmldir'
+      step: {$ref: steps.yml#/makews}
+  - name: plot
+    dependencies: [makews]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        combined_model: {stages: 'makews', output: workspace, unwrap: true}
+        prefit_plot: '{workdir}/prefit.pdf'
+        postfit_plot: '{workdir}/postfit.pdf'
+      step: {$ref: steps.yml#/plot}
+  - name: hepdata
+    dependencies: [makews]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        combined_model: {stages: 'makews', output: workspace, unwrap: true}
+        hepdata_submission: '{workdir}/submission.zip'
+      step: {$ref: steps.yml#/hepdata}
+

@@ -1,0 +1,177 @@
+generate:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      python /code/generantuple.py {type} {nevents} {outputfile}
+  environment:
+    environment_type: docker-encapsulated
+    image: lukasheinrich/dummyanalysis
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      outputfile: 'outputfile'
+
+select:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      python /code/select.py {inputfile} {outputfile} {region} nominal
+  environment:
+    environment_type: docker-encapsulated
+    image: lukasheinrich/dummyanalysis
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      outputfile: 'outputfile'
+
+select_mc:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      variations=$(cat /parmounts/variations|sed 's|"||g'|paste -sd , -)
+      python /code/select.py {inputfile} {outputfile} {region} $variations
+  environment:
+    environment_type: docker-encapsulated
+    image: lukasheinrich/dummyanalysis
+    par_mounts:
+      - mountpath: /parmounts/variations
+        jqscript: .variations[]
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      outputfile: 'outputfile'
+
+histogram:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      variations=$(cat /parmounts/variations|sed 's|"||g'|paste -sd , -)
+      python /code/histogram.py {inputfile} {outputfile} {name} {weight} $variations
+  environment:
+    environment_type: docker-encapsulated
+    image: lukasheinrich/dummyanalysis
+    par_mounts:
+      - mountpath: /parmounts/variations
+        jqscript: .variations[]
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      outputfile: 'outputfile'
+
+histogram_shape:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      variations=$(cat /parmounts/variations|sed 's|"||g'|paste -sd , -)
+      name="{name}_$(cat /parmounts/shapevar|sed 's|"||g')"
+      python /code/histogram.py {inputfile} {outputfile} $name {weight} $variations '{{name}}'
+  environment:
+    environment_type: docker-encapsulated
+    image: lukasheinrich/dummyanalysis
+    par_mounts:
+      - mountpath: /parmounts/variations
+        jqscript: .variations[]
+      - mountpath: /parmounts/shapevar
+        jqscript: .shapevar[]
+
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      outputfile: 'outputfile'
+
+makews:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      python /code/makews.py {data_bkg_hists} {workspace_prefix} {xml_dir}
+  environment:
+    environment_type: docker-encapsulated
+    image: lukasheinrich/dummyanalysis
+  publisher:
+    publisher_type: 'interpolated-pub'
+    glob: True
+    publish:
+      workspace: '{workspace_prefix}*combined*model.root'
+
+merge_root:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      cat /parmounts/inputs|sed 's|"||g' |xargs hadd {mergedfile}
+  environment:
+    environment_type: docker-encapsulated
+    image: rootproject/root-ubuntu16
+    par_mounts:
+      - mountpath: '/parmounts/inputs'
+        jqscript: '.inputs[]'
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      mergedfile: 'mergedfile'
+
+merge_root_allpars:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      cat /parmounts/inputs|sed 's|"||g' |xargs hadd {mergedfile}
+  environment:
+    environment_type: docker-encapsulated
+    image: rootproject/root-ubuntu16
+    par_mounts:
+      - mountpath: '/parmounts/inputs'
+        jqscript: 'to_entries[]|select(.key != "mergedfile").value'
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      mergedfile: 'mergedfile'
+
+plot:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      hfquickplot write_vardef {combined_model} combined nominal_vals.yml
+      hfquickplot plot_channel {combined_model} combined channel1 x nominal_vals.yml -c qcd,mc2,mc1,signal -o {prefit_plot}
+      hfquickplot fit {combined_model} combined fitresults.yml
+      hfquickplot plot_channel {combined_model} combined channel1 x fitresults.yml -c qcd,mc2,mc1,signal -o {postfit_plot}
+  environment:
+    environment_type: docker-encapsulated
+    image: lukasheinrich/dummyanalysis
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      prefit: 'prefit_plot'
+      postfit: 'postfit_plot'
+
+hepdata:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: bash
+    script: |
+      source /usr/local/bin/thisroot.sh
+      python /code/hepdata_export.py {combined_model}
+      zip {hepdata_submission} submission.yaml data1.yaml
+  environment:
+    environment_type: docker-encapsulated
+    image: lukasheinrich/dummyanalysis
+  publisher:
+    publisher_type: 'frompar-pub'
+    outputmap:
+      hepdata_submission: 'hepdata_submission'

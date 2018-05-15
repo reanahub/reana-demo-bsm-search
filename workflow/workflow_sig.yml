@@ -1,0 +1,77 @@
+stages:
+  - name: read
+    dependencies: [init]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        nevents: {stages: init, output: nevents, unwrap: true}
+        outputfile: '{workdir}/output_one.root'
+        type: 'sig'
+      step: {$ref: steps.yml#/generate}
+      scatter:
+        method: zip
+        parameters: [nevents]
+
+  - name: merge
+    dependencies: [read]
+    scheduler:
+      scheduler_type: multistep-stage
+      batchsize: 2
+      parameters:
+        inputs: {stages: 'read', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+      scatter:
+        method: zip
+        parameters: [inputs]
+
+  - name: select
+    dependencies: [merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'merge', output: mergedfile}
+        outputfile: '{workdir}/select_signal.root'
+        region: signal
+        variations: [nominal]
+      step: {$ref: steps.yml#/select_mc}
+      scatter:
+        method: zip
+        parameters: [inputfile]
+
+  - name: select_merge
+    dependencies: [select]
+    scheduler:
+      scheduler_type: multistep-stage
+      batchsize: 2
+      parameters:
+        inputs: {stages: 'select', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+      scatter:
+        method: zip
+        parameters: [inputs]
+
+  - name: select_hist
+    dependencies: [select_merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'select_merge', output: mergedfile}
+        outputfile: '{workdir}/hist.root'
+        name: 'signal'
+        weight: {stages: init, output: mcweight, unwrap: true}
+        variations: [nominal]
+      step: {$ref: steps.yml#/histogram}
+      scatter:
+        method: zip
+        parameters: [inputfile]
+
+  - name: hist_merge
+    dependencies: [select_hist]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        inputs: {stages: 'select_hist', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}

@@ -1,0 +1,112 @@
+stages:
+  - name: read
+    dependencies: [init]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        nevents: {stages: init, output: nevents, unwrap: true}
+        outputfile: '{workdir}/output_one.root'
+        type: 'data'
+      step: {$ref: steps.yml#/generate}
+      scatter:
+        method: zip
+        parameters: [nevents]
+  - name: merge
+    dependencies: [read]
+    scheduler:
+      scheduler_type: multistep-stage
+      batchsize: 6
+      parameters:
+        inputs: {stages: 'read', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+      scatter:
+        method: zip
+        parameters: [inputs]
+  - name: select_signal
+    dependencies: [merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'merge', output: mergedfile}
+        outputfile: '{workdir}/select_signal.root'
+        region: 'signal'
+      step: {$ref: steps.yml#/select}
+      scatter:
+        method: zip
+        parameters: [inputfile]
+  - name: select_signal_merge
+    dependencies: [select_signal]
+    scheduler:
+      scheduler_type: multistep-stage
+      batchsize: 6
+      parameters:
+        inputs: {stages: 'select_signal', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+      scatter:
+        method: zip
+        parameters: [inputs]
+  - name: select_control
+    dependencies: [merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'merge', output: mergedfile}
+        outputfile: '{workdir}/select_control.root'
+        region: 'control'
+      step: {$ref: steps.yml#/select}
+      scatter:
+        method: zip
+        parameters: [inputfile]
+  - name: select_control_merge
+    dependencies: [select_control]
+    scheduler:
+      scheduler_type: multistep-stage
+      batchsize: 5
+      parameters:
+        inputs: {stages: 'select_control', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
+      scatter:
+        method: zip
+        parameters: [inputs]
+
+  - name: select_signal_hist
+    dependencies: [select_signal_merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'select_signal_merge', output: mergedfile}
+        outputfile: '{workdir}/hist.root'
+        name: 'data'
+        weight: 1.0
+        variations: ['nominal']
+      step: {$ref: steps.yml#/histogram}
+      scatter:
+        method: zip
+        parameters: [inputfile]
+
+  - name: select_control_hist
+    dependencies: [select_control_merge]
+    scheduler:
+      scheduler_type: multistep-stage
+      parameters:
+        inputfile: {stages: 'select_control_merge', output: mergedfile}
+        outputfile: '{workdir}/hist.root'
+        name: 'qcd'
+        weight: 0.1875 # 0.2 / 0.8 * 0.75 transfer factor to signal region
+        variations: ['nominal']
+      step: {$ref: steps.yml#/histogram}
+      scatter:
+        method: zip
+        parameters: [inputfile]
+
+  - name: mergeall
+    dependencies: [select_signal_hist,select_control_hist]
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters:
+        inputs: {stages: 'select_signal_hist,select_control_hist', output: outputfile}
+        mergedfile: '{workdir}/merged.root'
+      step: {$ref: steps.yml#/merge_root}
