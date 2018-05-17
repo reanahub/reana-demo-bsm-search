@@ -1,0 +1,32 @@
+notifications:
+  email: false
+
+sudo: true
+
+language: python
+
+cache:
+  - pip
+
+python:
+  - 2.7
+
+services:
+  - docker
+
+before_install:
+  - travis_retry pip install yadage
+
+install:
+  # test whether we can build analysis environment image:
+  - docker build -f environment/Dockerfile -t reanahub/reana-demo-bsm-search .
+
+script:
+  # test whether the workflow is valid:
+  - yadage-validate databkgmc.yml -t workflow | grep -q 'workflow validates'
+  # test whether the ROOT version is well 6:
+  - docker run -i -t --rm -v `pwd`/code:/code reanahub/reana-demo-bsm-search root-config --version | grep -q ^6
+  # test whether we can import hftools Python library:
+  - docker run -i -t --rm -v `pwd`/code:/code reanahub/reana-demo-bsm-search /bin/bash -c 'source /usr/local/bin/thisroot.sh && python -c "import hftools.hepdata"'
+  # test whether the latest analysis code is well present inside the container:
+  - docker run -i -t --rm -v `pwd`/code:/newcode reanahub/reana-demo-bsm-search diff -r /code /newcode
