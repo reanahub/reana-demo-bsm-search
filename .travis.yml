@@ -23,7 +23,7 @@ install:
 
 script:
   # test whether the workflow is valid:
-  - yadage-validate databkgmc.yml -t workflow | grep -q 'workflow validates'
+  - yadage-validate workflow/databkgmc.yml | grep -q 'workflow validates'
   # test whether the ROOT version is well 6:
   - docker run -i -t --rm -v `pwd`/code:/code reanahub/reana-demo-bsm-search root-config --version | grep -q ^6
   # test whether we can import hftools Python library:

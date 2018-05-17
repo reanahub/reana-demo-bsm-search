@@ -1,6 +1,6 @@
-=================================
- REANA demo example - BSM search
-=================================
+============================
+ REANA example - BSM search
+============================
 
 .. image:: https://img.shields.io/travis/reanahub/reana-demo-bsm-search.svg
    :target: https://travis-ci.org/reanahub/reana-demo-bsm-search
@@ -14,25 +14,28 @@
 About
 =====
 
-This `REANA <http://reanahub.io/>`_ demo example emulates typical Beyond
-Standard Model (BSM) searches in particle physics data analyses. The signal and
-background data is processed and fitted against a model. The example uses `ROOT
-<https://root.cern.ch/>`_ analysis framework and `Yadage
+This `REANA <http://reanahub.io/>`_ reproducible analysis example emulates
+typical Beyond Standard Model (BSM) searches in particle physics data analyses.
+The signal and background data is processed and fitted against a model. The
+example uses `ROOT <https://root.cern.ch/>`_ analysis framework and `Yadage
 <https://github.com/yadage>`_ computational workflow engine.
 
 Analysis structure
 ==================
 
-Making a research data analysis reproducible means to provide "runnable recipes"
-addressing (1) where the input datasets are, (2) what software was used to
-analyse the data, (3) which computing environment was used to run the software,
-and (4) which workflow steps were taken to run the analysis.
+Making a research data analysis reproducible basically means to provide
+"runnable recipes" addressing (1) where is the input data, (2) what software was
+used to analyse the data, (3) which computing environments were used to run the
+software and (4) which computational workflow steps were taken to run the
+analysis. This will permit to instantiate the analysis on the computational
+cloud and run the analysis to obtain (5) output results.
 
-1. Input dataset
----------------
+1. Input data
+-------------
 
-In this example the signal and background data will be generated. Therefore
-there is no explicit input file to be taken care of.
+In this example, the input datasets representing the collision and simulated
+data will be generated. Therefore there is no explicit input data to be taken
+care of.
 
 2. Analysis code
 ----------------
@@ -116,66 +119,148 @@ data, signal, simulation, merging, fitting and plotting steps:
    :alt: workflow-small.png
    :align: center
 
-The workflow inputs are ``nevents`` representing the number of events,
-``mcweight`` representing the simulated data weight. They are defined in the
-workflow file as parameters, for example:
+The workflow inputs include:
+
+- ``nevents`` representing the number of collision events
+- ``mcweight`` representing the simulated data weight
+
+The parameters are defined in the workflow file, for example:
 
 .. code-block:: console
 
-   $ less workflow/databkgmc.yml
-   mcname: [mc1,mc2]
-   mcweight: [0.01875,0.0125]  # [Ndata / Ngen * 0.2 * 0.15,  Ndata / Ngen * 0.2 * 0.1] = [10/16*0.03, 1/16 * 0.02]
-   nevents:  [20000,20000,20000,20000,20000,20000,20000,20000]  #160k events / mc sample
+   $ head -8 workflow/databkgmc.yml
+   stages:
+     - name: all_bkg_mc
+       scheduler:
+         scheduler_type: singlestep-stage
+         parameters:
+           mcname: [mc1,mc2]
+           mcweight: [0.01875,0.0125]  # [Ndata / Ngen * 0.2 * 0.15,  Ndata / Ngen * 0.2 * 0.1] = [10/16*0.03, 1/16 * 0.02]
+           nevents:  [40000,40000,40000,40000]  #160k events / mc sample
 
 Please see the `databkgmc.yml <workflow/databkgmc.yml>`_ workflow definition and
 related `Yadage documentation <http://yadage.readthedocs.io/>`_.
 
-Local testing with Yadage
-=========================
+5. Output results
+-----------------
 
-We can check whether the example works locally using directly the `Yadage
-<https://github.com/yadage>`_ workflow engine. We can install Yadage in a new
-virtual environment:
-
-.. code-block:: console
-
-   $ mkvirtualenv yadage
-   $ pip install yadage==0.13.5 yadage-schemas==0.7.16 packtivity==0.10.0
-
-and run the analysis in a new ``_run`` directory:
-
-.. code-block:: console
-
-   $ yadage-run _run databkgmc.yml -t workflow
-   2018-05-16 15:32:04,830 - yadage.utils - INFO - setting up backend multiproc:auto with opts {}
-   2018-05-16 15:32:04,832 - packtivity.asyncbackends - INFO - configured pool size to 4
-   2018-05-16 15:32:04,841 - yadage.utils - INFO - _run {}
-   2018-05-16 15:32:05,070 - yadage.steering_object - INFO - no initialization data
-   2018-05-16 15:32:05,070 - adage.pollingexec - INFO - preparing adage coroutine.
-   2018-05-16 15:32:05,071 - adage - INFO - starting state loop.
-   ...
-   ...
-   2018-05-16 15:34:46,824 - adage - INFO - adage state loop done.
-   2018-05-16 15:34:46,825 - adage - INFO - execution valid. (in terms of execution order)
-   2018-05-16 15:34:46,921 - adage.controllerutils - INFO - no nodes can be run anymore and no rules are applicable
-   2018-05-16 15:34:46,921 - adage - INFO - workflow completed successfully.
-
-The analysis will run for about two minutes and will produce two final plots:
-
-.. code-block:: console
-
-   $ ls -l _run/plot/*.pdf
-   -rw-r--r-- 1 root root 19193 May 16 15:34 _run/plot/postfit.pdf
-   -rw-r--r-- 1 root root 19450 May 16 15:34 _run/plot/prefit.pdf
+The analysis produces the following post-fit output plot:
 
 .. figure:: https://raw.githubusercontent.com/reanahub/reana-demo-bsm-search/master/docs/postfit.png
    :alt: postfit.png
    :align: center
 
+Local testing
+=============
+
+*Optional*
+
+If you would like to test the analysis locally (i.e. outside of the REANA
+platform), you can proceed as follows:
+
+.. code-block:: console
+
+   $ # this analysis example uses yadage; let's install it
+   $ mkvirtualenv yadage
+   $ pip install yadage==0.13.5 yadage-schemas==0.7.16 packtivity==0.10.0
+   $ # we can now run the analysis workflow
+   $ sudo yadage-run _run workflow/databkgmc.yml
+   $ # let up check output files
+   $ ls -l _run/plot/*.pdf
+   -rw-r--r-- 1 root root 19193 May 16 15:34 _run/plot/postfit.pdf
+   -rw-r--r-- 1 root root 19450 May 16 15:34 _run/plot/prefit.pdf
+
 Running the example on REANA cloud
 ==================================
 
-**FIXME**
+First we need to create a `reana.yaml <reana.yaml>`_ file describing the
+structure of our analysis with its inputs, the code, the runtime environment,
+the workflow and the expected outputs:
+
+.. code-block:: yaml
+
+   version: 0.2.0
+   inputs:
+    parameters:
+       nevents: 160000
+   outputs:
+     files:
+      - outputs/plot/postfit.pdf
+   environments:
+    - type: docker
+      image: reanahub/reana-demo-bsm-search
+   workflow:
+     type: yadage
+     file: workflow/databkgmc.yml
+
+We proceed by installing the REANA command-line client:
+
+.. code-block:: console
+
+    $ mkvirtualenv reana-client
+    $ pip install reana-client
+
+We should now connect the client to the remote REANA cloud where the analysis
+will run. We do this by setting the ``REANA_SERVER_URL`` environment variable:
+
+.. code-block:: console
+
+    $ export REANA_SERVER_URL=https://reana.cern.ch/
+
+Note that if you `run REANA cluster locally
+<http://reana-cluster.readthedocs.io/en/latest/gettingstarted.html#deploy-reana-cluster-locally>`_
+on your laptop, you would do:
+
+.. code-block:: console
+
+   $ eval $(reana-cluster env)
+
+Let us test the client-to-server connection:
+
+.. code-block:: console
+
+   $ reana-client ping
+   Server is running.
+
+We proceed to create a new workflow instance:
+
+.. code-block:: console
+
+    $ reana-client workflow create
+    workflow.1
+    $ export REANA_WORKON=workflow.1
+
+We can now start the workflow execution:
+
+.. code-block:: console
+
+    $ reana-client workflow start
+    workflow.1 has been started.
+
+After several minutes the workflow should be successfully finished. Let us query
+its status:
+
+.. code-block:: console
+
+    $ reana-client workflow status
+    NAME       RUN_NUMBER   ID                                     USER                                   ORGANIZATION   STATUS
+    workflow   1            0df60c85-9d84-402e-814c-0595fe5fd439   00000000-0000-0000-0000-000000000000   default        finished
+
+We can list the output files:
+
+.. code-block:: console
+
+    $ reana-client outputs list | head -3
+    NAME                                                 SIZE      LAST-MODIFIED
+    plot/postfit.pdf                                     19404     2018-06-07 23:44:53.830441+00:00
+    plot/prefit.pdf                                      19425     2018-06-07 23:44:53.830441+00:00
+
+We finish by downloading generated plots:
+
+.. code-block:: console
+
+    $ reana-client outputs download plot/postfit.pdf
+    File plot/postfit.pdf downloaded to ./outputs/
 
 Contributors
 ============

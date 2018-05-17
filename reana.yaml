@@ -1,0 +1,13 @@
+version: 0.2.0
+inputs:
+ parameters:
+    nevents: 160000
+outputs:
+  files:
+   - outputs/plot/postfit.pdf
+environments:
+ - type: docker
+   image: reanahub/reana-demo-bsm-search
+workflow:
+  type: yadage
+  file: workflow/databkgmc.yml
