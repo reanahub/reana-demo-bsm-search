@@ -9,7 +9,7 @@
    :target: https://gitter.im/reanahub/reana?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge
 
 .. image:: https://img.shields.io/github/license/reanahub/reana-demo-bsm-search.svg
-   :target: https://github.com/reanahub/reana-demo-bsm-search/blob/master/LICENSE
+   :target: https://raw.githubusercontent.com/reanahub/reana-demo-bsm-search/master/LICENSE
 
 About
 =====
