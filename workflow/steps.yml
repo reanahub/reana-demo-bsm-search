@@ -34,14 +34,11 @@ select_mc:
     interpreter: bash
     script: |
       source /usr/local/bin/thisroot.sh
-      variations=$(cat /parmounts/variations|sed 's|"||g'|paste -sd , -)
+      variations=$(echo {variations}|sed 's| |,|g')
       python /code/select.py {inputfile} {outputfile} {region} $variations
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
-    par_mounts:
-      - mountpath: /parmounts/variations
-        jqscript: .variations[]
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -53,14 +50,11 @@ histogram:
     interpreter: bash
     script: |
       source /usr/local/bin/thisroot.sh
-      variations=$(cat /parmounts/variations|sed 's|"||g'|paste -sd , -)
+      variations=$(echo {variations}|sed 's| |,|g')
       python /code/histogram.py {inputfile} {outputfile} {name} {weight} $variations
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
-    par_mounts:
-      - mountpath: /parmounts/variations
-        jqscript: .variations[]
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -72,18 +66,12 @@ histogram_shape:
     interpreter: bash
     script: |
       source /usr/local/bin/thisroot.sh
-      variations=$(cat /parmounts/variations|sed 's|"||g'|paste -sd , -)
-      name="{name}_$(cat /parmounts/shapevar|sed 's|"||g')"
+      variations=$(echo {variations}|sed 's| |,|g')
+      name="{name}_{shapevar}"
       python /code/histogram.py {inputfile} {outputfile} $name {weight} $variations '{{name}}'
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
-    par_mounts:
-      - mountpath: /parmounts/variations
-        jqscript: .variations[]
-      - mountpath: /parmounts/shapevar
-        jqscript: .shapevar[]
-
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -111,13 +99,10 @@ merge_root:
     interpreter: bash
     script: |
       source /usr/local/bin/thisroot.sh
-      cat /parmounts/inputs|sed 's|"||g' |xargs hadd {mergedfile}
+      hadd {mergedfile} {inputs}
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-env-root6
-    par_mounts:
-      - mountpath: '/parmounts/inputs'
-        jqscript: '.inputs[]'
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -129,13 +114,10 @@ merge_root_allpars:
     interpreter: bash
     script: |
       source /usr/local/bin/thisroot.sh
-      cat /parmounts/inputs|sed 's|"||g' |xargs hadd {mergedfile}
+      hadd {mergedfile} {signal} {data} {background}
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-env-root6
-    par_mounts:
-      - mountpath: '/parmounts/inputs'
-        jqscript: 'to_entries[]|select(.key != "mergedfile").value'
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
