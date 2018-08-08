@@ -415,11 +415,13 @@ We proceed by installing the REANA command-line client:
     $ pip install reana-client
 
 We should now connect the client to the remote REANA cloud where the analysis
-will run. We do this by setting the ``REANA_SERVER_URL`` environment variable:
+will run. We do this by setting the ``REANA_SERVER_URL`` environment variable
+and ``REANA_ACCESS_TOKEN`` with a valid access token:
 
 .. code-block:: console
 
     $ export REANA_SERVER_URL=https://reana.cern.ch/
+    $ export REANA_ACCESS_TOKEN=<ACCESS_TOKEN>
 
 Note that if you `run REANA cluster locally
 <http://reana-cluster.readthedocs.io/en/latest/gettingstarted.html#deploy-reana-cluster-locally>`_
@@ -427,20 +429,20 @@ on your laptop, you would do:
 
 .. code-block:: console
 
-   $ eval $(reana-cluster env)
+   $ eval $(reana-cluster env --all)
 
 Let us test the client-to-server connection:
 
 .. code-block:: console
 
-   $ reana-client ping
-   Server is running.
+    $ reana-client ping
+    Connected to https://reana.cern.ch - Server is running.
 
 We proceed to create a new workflow instance:
 
 .. code-block:: console
 
-    $ reana-client workflow create
+    $ reana-client create
     workflow.1
     $ export REANA_WORKON=workflow.1
 
@@ -448,7 +450,7 @@ We can now start the workflow execution:
 
 .. code-block:: console
 
-    $ reana-client workflow start
+    $ reana-client start
     workflow.1 has been started.
 
 After several minutes the workflow should be successfully finished. Let us query
@@ -456,30 +458,30 @@ its status:
 
 .. code-block:: console
 
-    $ reana-client workflow status
-    NAME       RUN_NUMBER   ID                                     USER                                   ORGANIZATION   STATUS
-    workflow   1            0df60c85-9d84-402e-814c-0595fe5fd439   00000000-0000-0000-0000-000000000000   default        finished
+    $ reana-client status
+    NAME       RUN_NUMBER   CREATED               STATUS     PROGRESS
+    workflow   1            2018-08-08T09:37:35   finished   67/65
 
 We can list the output files:
 
 .. code-block:: console
 
-    $ reana-client outputs list | head -3
-    NAME                                                 SIZE      LAST-MODIFIED
-    plot/postfit.pdf                                     19404     2018-06-07 23:44:53.830441+00:00
-    plot/prefit.pdf                                      19425     2018-06-07 23:44:53.830441+00:00
+    $ reana-client list | grep ".pdf"
+    plot/postfit.pdf                                                            19439     2018-08-08 09:55:07.913777+00:00
+    plot/prefit.pdf                                                             19401     2018-08-08 09:55:00.399603+00:00
 
 We finish by downloading generated plots:
 
 .. code-block:: console
 
-    $ reana-client outputs download plot/postfit.pdf
-    File plot/postfit.pdf downloaded to ./outputs/
+    $ reana-client download plot/postfit.pdf
+    File plot/postfit.pdf downloaded to /home/reana/reanahub/reana-demo-bsm-search.
 
 Contributors
 ============
 
 The list of contributors in alphabetical order:
 
+- `Diego Rodriguez <https://orcid.org/0000-0003-0649-2002>`_ <diego.rodriguez@cern.ch>
 - `Lukas Heinrich <https://orcid.org/0000-0002-4048-7584>`_ <lukas.heinrich@gmail.com>
 - `Tibor Simko <https://orcid.org/0000-0001-7202-5803>`_ <tibor.simko@cern.ch>
