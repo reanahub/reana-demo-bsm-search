@@ -1,3 +1,16 @@
+# If you would like to test the analysis locally (i.e. outside of the REANA
+# platform), you can proceed as follows:
+#
+#   this analysis example uses yadage; let's install it
+#   $ mkvirtualenv yadage
+#   $ pip install yadage
+#   we can now run the analysis workflow
+#   $ yadage-run _run workflow/databkgmc.yml
+#   let up check output files
+#   $ ls -l _run/plot/*.pdf
+#   -rw-r--r-- 1 root root 19193 May 16 15:34 _run/plot/postfit.pdf
+#   -rw-r--r-- 1 root root 19450 May 16 15:34 _run/plot/prefit.pdf
+
 stages:
   - name: all_bkg_mc
     scheduler:

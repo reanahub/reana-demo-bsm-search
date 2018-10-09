@@ -20,7 +20,7 @@ before_install:
 
 install:
   # test whether we can build analysis environment image:
-  - docker build -f environment/Dockerfile -t reanahub/reana-demo-bsm-search .
+  - docker build -f environments/reana-demo-bsm-search/Dockerfile -t reanahub/reana-demo-bsm-search .
 
 script:
   # test whether the workflow is valid:
