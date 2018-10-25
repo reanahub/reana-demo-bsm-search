@@ -1,8 +1,6 @@
 # If you would like to test the analysis locally (i.e. outside of the REANA
 # platform), you can proceed as follows:
 #
-#   this analysis example uses yadage; let's install it
-#   $ mkvirtualenv yadage
 #   $ pip install yadage
 #   we can now run the analysis workflow
 #   $ yadage-run _run workflow/databkgmc.yml

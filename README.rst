@@ -388,8 +388,10 @@ We can now install the REANA command-line client, run the analysis and download 
 
 .. code-block:: console
 
+    $ # create new virtual environment
+    $ virtualenv ~/.virtualenvs/myreana
+    $ source ~/.virtualenvs/myreana/bin/activate
     $ # install REANA client
-    $ mkvirtualenv reana-client
     $ pip install reana-client
     $ # connect to some REANA cloud instance
     $ export REANA_SERVER_URL=https://reana.cern.ch/
