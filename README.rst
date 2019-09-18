@@ -157,25 +157,31 @@ follows:
 
 .. code-block:: console
 
-   $ less environment/Dockerfile
-   # Start from the ROOT6 base image:
-   FROM reanahub/reana-env-root6
+    # Start from the ROOT6 base image:
+    FROM reanahub/reana-env-root6
 
-   # Install HFtools:
-   RUN apt-get -y update && \
-       apt-get -y install \
-          python-pip \
-          zip && \
-       apt-get autoremove -y && \
-       apt-get clean -y
-   RUN pip install hftools
+    # Install HFtools:
 
-   # Mount our code:
-   ADD code /code
-   WORKDIR /code
+    # Update and install dependendies
+    RUN apt-get -y update && \
+        apt-get -y install \
+           python-pip \
+           zip && \
+        apt-get autoremove -y && \
+        apt-get clean -y
 
-We can build our analysis environment image and give it a name
-``reanahub/reana-demo-bsm-search``:
+    RUN pip install hftools==0.0.1
+
+    # Mount our code:
+    ADD code /code
+    WORKDIR /code
+
+    # Mount our code:
+    RUN adduser atlas && usermod -aG root atlas
+    USER atlas
+
+We can build our analysis environment image inside this directory and give it a
+name ``reanahub/reana-demo-bsm-search``:
 
 .. code-block:: console
 
@@ -225,23 +231,23 @@ each other. Once they are done the remaining steps needed are
 
 .. code-block:: console
 
-  +---------------+   +--------------+    +------+
-  | Data & Mulijet|   |SM Backgrounds|    |Signal|
-  +---------------+   +--------------+    +------+
-       |                 |                 |
-       |                 |                 |
-       +-------->        v      <----------+
-                      +--+--+
-                      |Merge|
-                      +--+--+
-                         |
-                         v
-                   +----------+
-                   | Workspace|
-                   +----------+
-  +-----------+      |      |          +------------------+
-  |Fit & Plots|  <---+      +---->     |HepData Submission|
-  +-----------+                        +------------------+
+  +----------------+   +----------------+    +--------+
+  | Data & Mulijet |   | SM Backgrounds |    | Signal |
+  +----------------+   +----------------+    +--------+
+       |                   |                   |
+       |                   |                   |
+       +-------->          v        <----------+
+                       +---+---+
+                       | Merge |
+                       +---+---+
+                           |
+                           v
+                     +-----------+
+                     | Workspace |
+                     +-----------+
+  +-------------+      |       |        +--------------------+
+  | Fit & Plots |  <---+       +---->   | HepData Submission |
+  +-------------+                       +--------------------+
 
 
 The Data Workflow
@@ -373,7 +379,7 @@ workflow steps and expected outputs:
 
 .. code-block:: yaml
 
-    version: 0.3.0
+    version: 0.6.0
     inputs:
       parameters:
         nevents: 160000
@@ -419,6 +425,7 @@ Contributors
 
 The list of contributors in alphabetical order:
 
+- `Daniel Prelipcean <https://orcid.org/0000-0002-4855-194X>`_
 - `Diego Rodriguez <https://orcid.org/0000-0003-0649-2002>`_
 - `Lukas Heinrich <https://orcid.org/0000-0002-4048-7584>`_
 - `Rokas Maciulaitis <https://orcid.org/0000-0003-1064-6967>`_
