@@ -1,7 +1,4 @@
 version: 0.6.0
-inputs:
- parameters:
-    nevents: 160000
 workflow:
   type: yadage
   file: workflow/databkgmc.yml
