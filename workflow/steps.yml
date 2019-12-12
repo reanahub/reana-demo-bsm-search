@@ -103,6 +103,7 @@ merge_root:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-env-root6
+    imagetag: 6.18.04
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -118,6 +119,7 @@ merge_root_allpars:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-env-root6
+    imagetag: 6.18.04
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -129,10 +131,10 @@ plot:
     interpreter: bash
     script: |
       source /usr/local/bin/thisroot.sh
-      hfquickplot write_vardef {combined_model} combined nominal_vals.yml
-      hfquickplot plot_channel {combined_model} combined channel1 x nominal_vals.yml -c qcd,mc2,mc1,signal -o {prefit_plot}
-      hfquickplot fit {combined_model} combined fitresults.yml
-      hfquickplot plot_channel {combined_model} combined channel1 x fitresults.yml -c qcd,mc2,mc1,signal -o {postfit_plot}
+      hfquickplot write-vardef {combined_model} combined {nominal_vals}
+      hfquickplot plot-channel {combined_model} combined channel1 x {nominal_vals} -c qcd,mc2,mc1,signal -o {prefit_plot}
+      hfquickplot fit {combined_model} combined {fit_results}
+      hfquickplot plot-channel {combined_model} combined channel1 x {fit_results} -c qcd,mc2,mc1,signal -o {postfit_plot}
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
@@ -148,12 +150,12 @@ hepdata:
     interpreter: bash
     script: |
       source /usr/local/bin/thisroot.sh
-      python /code/hepdata_export.py {combined_model}
-      zip {hepdata_submission} submission.yaml data1.yaml
+      python /code/hepdata_export.py {combined_model} {hepdata_submission_yaml} {hepdata_data1_yaml}
+      zip {hepdata_submission_zip} {hepdata_submission_yaml} {hepdata_data1_yaml}
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
-      hepdata_submission: 'hepdata_submission'
+      hepdata_submission_zip: 'hepdata_submission_zip'

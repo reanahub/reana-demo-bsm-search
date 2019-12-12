@@ -56,6 +56,8 @@ stages:
       scheduler_type: singlestep-stage
       parameters:
         combined_model: {stages: 'makews', output: workspace, unwrap: true}
+        nominal_vals: '{workdir}/nominal_vals.yml'
+        fit_results: '{workdir}/fit_results.yml'
         prefit_plot: '{workdir}/prefit.pdf'
         postfit_plot: '{workdir}/postfit.pdf'
       step: {$ref: workflow/steps.yml#/plot}
@@ -65,5 +67,7 @@ stages:
       scheduler_type: singlestep-stage
       parameters:
         combined_model: {stages: 'makews', output: workspace, unwrap: true}
-        hepdata_submission: '{workdir}/submission.zip'
+        hepdata_submission_zip: '{workdir}/submission.zip'
+        hepdata_submission_yaml: '{workdir}/submission.yaml'
+        hepdata_data1_yaml: '{workdir}/data1.yaml'
       step: {$ref: workflow/steps.yml#/hepdata}

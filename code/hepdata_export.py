@@ -1,7 +1,10 @@
-import hftools.hepdata as hft_hepdata
-import yaml
+import os
 import sys
+
 import ROOT
+import yaml
+
+import hftools.hepdata as hft_hepdata
 
 main_submission = '''\
 ---
@@ -32,20 +35,27 @@ def main():
     ]
 
     rootfile = sys.argv[1]
+    try:
+        submission_yaml = sys.argv[2]
+    except:
+        submission_yaml = 'submission.yaml'
+    try:
+        data1_yaml = sys.argv[3]
+    except:
+        data1_yaml = 'data1.yaml'
     observable = 'x'
     channel = 'channel1'
     workspace = 'combined'
-    outputfile = 'data1.yaml'
 
     f  = ROOT.TFile.Open(str(rootfile))
     ws = f.Get(str(workspace))
 
     hepdata_table = hft_hepdata.hepdata_table(ws,channel,observable,sampledef)
 
-    with open('submission.yaml','w') as f:
+    with open(submission_yaml,'w') as f:
         f.write(main_submission)
 
-    with open(outputfile,'w') as f:
+    with open(data1_yaml,'w') as f:
         f.write(yaml.safe_dump(hepdata_table,default_flow_style = False))
 
 

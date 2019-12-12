@@ -157,22 +157,23 @@ follows:
 
 .. code-block:: console
 
-   $ less environment/Dockerfile
-   # Start from the ROOT6 base image:
-   FROM reanahub/reana-env-root6
+    $ less environments/reana-demo-bsm-search/Dockerfile
+    # Start from the ROOT6 base image:
+    FROM reanahub/reana-env-root6:6.18.04
 
-   # Install HFtools:
-   RUN apt-get -y update && \
-       apt-get -y install \
-          python-pip \
-          zip && \
-       apt-get autoremove -y && \
-       apt-get clean -y
-   RUN pip install hftools
+    # Install HFtools and its dependencies:
+    RUN apt-get -y update && \
+        apt-get -y install \
+           libyaml-dev \
+           python-numpy \
+           zip && \
+        apt-get autoremove -y && \
+        apt-get clean -y
+    RUN pip install hftools==0.0.6
 
-   # Mount our code:
-   ADD code /code
-   WORKDIR /code
+    # Mount our code:
+    ADD code /code
+    WORKDIR /code
 
 We can build our analysis environment image and give it a name
 ``reanahub/reana-demo-bsm-search``:
