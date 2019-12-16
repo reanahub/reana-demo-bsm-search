@@ -203,8 +203,8 @@ express the computational steps in a declarative manner. The `databkgmc.yml
 <workflow/databkgmc.yml>`_ workflow defines the full pipeline defining various
 data, signal, simulation, merging, fitting and plotting steps:
 
-.. figure:: https://raw.githubusercontent.com/reanahub/reana-demo-bsm-search/master/docs/workflow-small.png
-   :alt: workflow-small.png
+.. figure:: https://raw.githubusercontent.com/reanahub/reana-demo-bsm-search/master/docs/workflow.png
+   :alt: workflow.png
    :align: center
 
 At a very high level the workflow is as follows
