@@ -1,4 +1,7 @@
 version: 0.6.0
+inputs:
+  directories:
+    - workflow
 workflow:
   type: yadage
   file: workflow/databkgmc.yml
