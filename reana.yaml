@@ -7,4 +7,5 @@ workflow:
   file: workflow/databkgmc.yml
 outputs:
   files:
-   - outputs/plot/postfit.pdf
+   - plot/prefit.pdf
+   - plot/postfit.pdf
