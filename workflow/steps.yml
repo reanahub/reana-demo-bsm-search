@@ -8,6 +8,7 @@ generate:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
+    imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -23,6 +24,7 @@ select:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
+    imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -39,6 +41,7 @@ select_mc:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
+    imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -55,6 +58,7 @@ histogram:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
+    imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -72,6 +76,7 @@ histogram_shape:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
+    imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -87,6 +92,7 @@ makews:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
+    imagetag: 1.0.0
   publisher:
     publisher_type: 'interpolated-pub'
     glob: True
@@ -138,6 +144,7 @@ plot:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
+    imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
@@ -155,6 +162,7 @@ hepdata:
   environment:
     environment_type: docker-encapsulated
     image: reanahub/reana-demo-bsm-search
+    imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
     outputmap:
