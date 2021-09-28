@@ -18,19 +18,18 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
-          python-version: 2.7
+          python-version: 3.8
 
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install reana-client
-          pip install reana-commons
+          pip install --pre reana-client
 
       - name: Build analysis environment image
         run: docker build -f environments/reana-demo-bsm-search/Dockerfile -t reanahub/reana-demo-bsm-search .
 
       - name: Validate workflow specification file
-        run: reana-client validate | grep -q ' is a valid '
+        run: reana-client validate
 
       - name: Test whether the ROOT version is well 6
         run: docker run -i --rm -v `pwd`/code:/code reanahub/reana-demo-bsm-search root-config --version | grep -q ^6
