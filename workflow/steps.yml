@@ -7,7 +7,7 @@ generate:
       python /code/generantuple.py {type} {nevents} {outputfile}
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-demo-bsm-search
+    image: docker.io/reanahub/reana-demo-bsm-search
     imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
@@ -23,7 +23,7 @@ select:
       python /code/select.py {inputfile} {outputfile} {region} nominal
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-demo-bsm-search
+    image: docker.io/reanahub/reana-demo-bsm-search
     imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
@@ -40,7 +40,7 @@ select_mc:
       python /code/select.py {inputfile} {outputfile} {region} $variations
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-demo-bsm-search
+    image: docker.io/reanahub/reana-demo-bsm-search
     imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
@@ -57,7 +57,7 @@ histogram:
       python /code/histogram.py {inputfile} {outputfile} {name} {weight} $variations
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-demo-bsm-search
+    image: docker.io/reanahub/reana-demo-bsm-search
     imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
@@ -75,7 +75,7 @@ histogram_shape:
       python /code/histogram.py {inputfile} {outputfile} $name {weight} $variations '{{name}}'
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-demo-bsm-search
+    image: docker.io/reanahub/reana-demo-bsm-search
     imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
@@ -91,7 +91,7 @@ makews:
       python /code/makews.py {data_bkg_hists} {workspace_prefix} {xml_dir}
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-demo-bsm-search
+    image: docker.io/reanahub/reana-demo-bsm-search
     imagetag: 1.0.0
   publisher:
     publisher_type: 'interpolated-pub'
@@ -108,7 +108,7 @@ merge_root:
       hadd {mergedfile} {inputs}
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-env-root6
+    image: docker.io/reanahub/reana-env-root6
     imagetag: 6.18.04
   publisher:
     publisher_type: 'frompar-pub'
@@ -124,7 +124,7 @@ merge_root_allpars:
       hadd {mergedfile} {signal} {data} {background}
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-env-root6
+    image: docker.io/reanahub/reana-env-root6
     imagetag: 6.18.04
   publisher:
     publisher_type: 'frompar-pub'
@@ -143,7 +143,7 @@ plot:
       hfquickplot plot-channel {combined_model} combined channel1 x {fit_results} -c qcd,mc2,mc1,signal -o {postfit_plot}
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-demo-bsm-search
+    image: docker.io/reanahub/reana-demo-bsm-search
     imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'
@@ -161,7 +161,7 @@ hepdata:
       zip {hepdata_submission_zip} {hepdata_submission_yaml} {hepdata_data1_yaml}
   environment:
     environment_type: docker-encapsulated
-    image: reanahub/reana-demo-bsm-search
+    image: docker.io/reanahub/reana-demo-bsm-search
     imagetag: 1.0.0
   publisher:
     publisher_type: 'frompar-pub'

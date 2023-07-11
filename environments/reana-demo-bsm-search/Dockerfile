@@ -1,5 +1,5 @@
 # Start from the ROOT6 base image:
-FROM reanahub/reana-env-root6:6.18.04
+FROM docker.io/reanahub/reana-env-root6:6.18.04
 
 # Install HFtools and its dependencies:
 RUN apt-get -y update && \

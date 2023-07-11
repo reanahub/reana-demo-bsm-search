@@ -62,7 +62,7 @@ developed using the experiment-internal software stack (e.g. CMSSW or the ATLAS
 Analysis Releases) and be based on C++ with many dependencies and require multiple
 container images. In this emulation we have two container images.
 
-1. A pure ROOT6 container image :code:`reanahub/reana-demo-bsm-search` used
+1. A pure ROOT6 container image :code:`docker.io/reanahub/reana-demo-bsm-search` used
    for most steps (such as selection, merging etc)
 2. An image based on ROOT6 which also has the :code:`hftools` package installed.
    This image is used for the last steps dealing with fitting, plotting and
@@ -162,7 +162,7 @@ follows:
 
     $ less environments/reana-demo-bsm-search/Dockerfile
     # Start from the ROOT6 base image:
-    FROM reanahub/reana-env-root6:6.18.04
+    FROM docker.io/reanahub/reana-env-root6:6.18.04
 
     # Install HFtools and its dependencies:
     RUN apt-get -y update && \
@@ -179,17 +179,17 @@ follows:
     WORKDIR /code
 
 We can build our analysis environment image and give it a name
-``reanahub/reana-demo-bsm-search``:
+``docker.io/reanahub/reana-demo-bsm-search``:
 
 .. code-block:: console
 
-   $ docker build -f environment/Dockerfile -t reanahub/reana-demo-bsm-search .
+   $ docker build -f environment/Dockerfile -t docker.io/reanahub/reana-demo-bsm-search .
 
 We can push the image to the DockerHub image registry:
 
 .. code-block:: console
 
-   $ docker push reanahub/reana-demo-bsm-search
+   $ docker push docker.io/reanahub/reana-demo-bsm-search
 
 (Note that typically you would use your own username such as ``johndoe`` in
 place of ``reanahub``.)
