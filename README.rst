@@ -391,15 +391,16 @@ workflow steps and expected outputs:
 
 .. code-block:: yaml
 
-    version: 0.3.0
+    version: 0.6.0
     inputs:
-      parameters:
-        nevents: 160000
+      directories:
+        - workflow
     workflow:
       type: yadage
       file: workflow/databkgmc.yml
     outputs:
       files:
+       - plot/prefit.pdf
        - plot/postfit.pdf
 
 We can now install the REANA command-line client, run the analysis and download the resulting plots:
@@ -418,15 +419,16 @@ We can now install the REANA command-line client, run the analysis and download 
     $ reana-client create -n my-analysis
     $ export REANA_WORKON=my-analysis
     $ # upload input code and data to the workspace
-    $ reana-client upload ./code
+    $ reana-client upload
     $ # start computational workflow
     $ reana-client start
     $ # ... should be finished in about 15 minutes
+    $ # check its status
     $ reana-client status
-    $ # list output files
-    $ reana-client list | grep ".pdf"
+    $ # list workspace files
+    $ reana-client ls
     $ # download generated plots
-    $ reana-client download plot/postfit.pdf
+    $ reana-client download
 
 Please see the `REANA-Client <https://reana-client.readthedocs.io/>`_
 documentation for more detailed explanation of typical ``reana-client`` usage
