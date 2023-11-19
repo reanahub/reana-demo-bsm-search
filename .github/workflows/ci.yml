@@ -23,8 +23,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install reana-client
-          pip install reana-commons
+          pip install --pre reana-client
 
       - name: Build analysis environment image
         run: docker build -f environments/reana-demo-bsm-search/Dockerfile -t reanahub/reana-demo-bsm-search .
