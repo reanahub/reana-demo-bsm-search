@@ -10,7 +10,7 @@ on: [push, pull_request]
 
 jobs:
   lint-commitlint:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
           ./run-tests.sh --check-commitlint ${{ github.event.pull_request.head.sha }}~${{ github.event.pull_request.commits }} ${{ github.event.pull_request.head.sha }} ${{ github.event.pull_request.number }}
 
   lint-shellcheck:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
           ./run-tests.sh --check-shellcheck
 
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,7 +55,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.8
+          python-version: 3.12
 
       - name: Install Python dependencies
         run: |
