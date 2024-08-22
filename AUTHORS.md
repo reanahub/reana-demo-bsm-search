@@ -2,6 +2,7 @@
 
 The list of contributors in alphabetical order:
 
+- [Alastair Lyall](https://orcid.org/0009-0000-4955-8935)
 - [Audrius Mecionis](https://orcid.org/0000-0002-3759-1663)
 - [Diego Rodriguez](https://orcid.org/0000-0003-0649-2002)
 - [Jan Okraska](https://orcid.org/0000-0002-1416-3244)

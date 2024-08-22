@@ -9,3 +9,8 @@ outputs:
   files:
    - plot/prefit.pdf
    - plot/postfit.pdf
+tests:
+  files:
+    - tests/log-messages.feature
+    - tests/run-duration.feature
+    - tests/workspace-files.feature
