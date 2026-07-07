@@ -22,7 +22,7 @@ limit on the signal strength of the BSM process is computed, which is the main
 output of the workflow.
 
 This example uses the [ROOT](https://root.cern.ch/) data analysis framework and
-[Yadage](https://github.com/yadage) computational workflow engine.
+[Snakemake](https://snakemake.readthedocs.io/) computational workflow engine.
 
 ## Analysis structure
 
@@ -189,12 +189,12 @@ This analysis example intends to emulate fully what is happening in a typical
 BSM search analysis. This means a lot of computational steps with parallel
 execution and merging of results.
 
-We shall use the [Yadage](https://github.com/yadage) workflow engine to express
-the computational steps in a declarative manner. The
-[databkgmc.yml](workflow/databkgmc.yml) workflow defines the full pipeline
-defining various data, signal, simulation, merging, fitting and plotting steps:
+We shall use the [Snakemake](https://snakemake.readthedocs.io/) workflow engine
+to express the computational steps in a declarative manner. The
+[Snakefile](workflow/Snakefile) workflow defines the full pipeline covering
+data, signal, simulation, merging, fitting, plotting, and HEPData export steps:
 
-![image](https://raw.githubusercontent.com/reanahub/reana-demo-bsm-search/master/docs/workflow.png)
+![image](docs/workflow.png)
 
 At a very high level the workflow is as follows
 
@@ -306,19 +306,31 @@ generate and, in the case of signal and background, what the relative weight
 should be.
 
 ```console
-$ head -8 workflow/databkgmc.yml
-stages:
-  - name: all_bkg_mc
-    scheduler:
-      scheduler_type: singlestep-stage
-      parameters:
-        mcname: [mc1,mc2]
-        mcweight: [0.01875,0.0125]  # [Ndata / Ngen * 0.2 * 0.15,  Ndata / Ngen * 0.2 * 0.1] = [10/16*0.03, 1/16 * 0.02]
-        nevents:  [40000,40000,40000,40000]  #160k events / mc sample
+$ head -20 workflow/config.yaml
+containers:
+  analysis: docker://docker.io/reanahub/reana-demo-bsm-search:1.0.0
+  root: docker://docker.io/reanahub/reana-env-root6:6.18.04
+
+workdir: work
+
+data:
+  nevents: [20000, 20000, 20000, 20000, 20000]
+  qcd_transfer_factor: 0.1875
+
+signal:
+  nevents: [40000, 40000]
+  weight: 0.0025
 ```
 
-Please see the [databkgmc.yml](workflow/databkgmc.yml) workflow definition and
-related [Yadage documentation](http://yadage.readthedocs.io/).
+The workflow can be checked locally without executing ROOT jobs:
+
+```console
+$ pixi run snakemake-dry-run
+```
+
+Please see the [Snakefile](workflow/Snakefile),
+[configuration file](workflow/config.yaml), and related
+[Snakemake documentation](https://snakemake.readthedocs.io/).
 
 ### 5. Output results
 
@@ -359,12 +371,14 @@ workflow steps and expected outputs:
 version: 0.6.0
 inputs:
   directories:
+    - code
     - workflow
 workflow:
-  type: yadage
-  file: workflow/databkgmc.yml
+  type: snakemake
+  file: workflow/Snakefile
 outputs:
   files:
+    - hepdata/submission.zip
     - plot/prefit.pdf
     - plot/postfit.pdf
 ```

@@ -1,0 +1,7 @@
+.pixi/
+.snakemake/
+hepdata/
+plot/
+results/
+work/
+xmldir/

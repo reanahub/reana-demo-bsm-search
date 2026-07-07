@@ -9,9 +9,9 @@ Feature: Workspace files
 
     Scenario: The workspace downloads the relevant input files
         When the workflow execution completes
-        Then the workspace should contain "data/read_0/output_one.root"
-        And the workspace should contain "signal/read_0/output_one.root"
-        And the workspace should contain "all_bkg_mc/run_mc_1/read_0/output_one.root"
+        Then the workspace should contain "code/generantuple.py"
+        And the workspace should contain "workflow/Snakefile"
+        And the workspace should contain "workflow/config.yaml"
 
     Scenario: The files used to build the outputs contain the expected values
         When the workflow is finished
@@ -28,5 +28,5 @@ Feature: Workspace files
         When the workflow is finished
         Then the workspace should include "plot/prefit.pdf"
         And the workspace should include "plot/postfit.pdf"
+        And the workspace should include "hepdata/submission.zip"
         And all the outputs should be included in the workspace
-

@@ -1,12 +1,14 @@
 version: 0.6.0
 inputs:
   directories:
+    - code
     - workflow
 workflow:
-  type: yadage
-  file: workflow/databkgmc.yml
+  type: snakemake
+  file: workflow/Snakefile
 outputs:
   files:
+    - hepdata/submission.zip
     - plot/prefit.pdf
     - plot/postfit.pdf
 tests:

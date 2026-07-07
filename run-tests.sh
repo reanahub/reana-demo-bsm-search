@@ -14,7 +14,7 @@ format_prettier() {
 }
 
 format_shfmt() {
-    shfmt -d .
+    find . -path ./.pixi -prune -o -name "*.sh" -exec shfmt -d {} \+
 }
 
 lint_commitlint() {
@@ -60,7 +60,7 @@ lint_markdownlint() {
 }
 
 lint_shellcheck() {
-    find . -name "*.sh" -exec shellcheck {} \+
+    find . -path ./.pixi -prune -o -name "*.sh" -exec shellcheck {} \+
 }
 
 lint_yamllint() {
