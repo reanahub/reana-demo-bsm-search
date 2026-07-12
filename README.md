@@ -343,6 +343,11 @@ validated against [config.schema.yaml](workflow/config.schema.yaml) while the
 Snakefile is parsed, so misspelled keys and incomplete systematic pairs fail
 before any jobs are submitted.
 
+The REANA 0.95 prerelease currently has a dependency conflict affecting this
+Snakemake 9 validation API. See the
+[REANA Snakemake validation note](docs/reana-snakemake-validation.md) for the
+reproduction and proposed upstream action.
+
 ```yaml
 containers:
   analysis: docker://docker.io/reanahub/reana-demo-bsm-search:1.0.0
