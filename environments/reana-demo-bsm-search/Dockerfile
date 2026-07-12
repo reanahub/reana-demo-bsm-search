@@ -1,6 +1,12 @@
 # Pin the base image digest so rebuilding this analysis environment is reproducible.
 FROM ghcr.io/clelange/root:6.38.04-ubuntu24.04@sha256:e2e6e95b610ac79cc6591920c1adc172a36ed04d903226c8f5d7826c6ef96dd4
 
+# Override the base image's OCI metadata so GHCR links this derived image to
+# this repository rather than to the repository that built the ROOT image.
+LABEL org.opencontainers.image.source="https://github.com/clelange/reana-demo-bsm-search" \
+      org.opencontainers.image.description="Analysis environment for the REANA BSM search example" \
+      org.opencontainers.image.licenses="MIT"
+
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
         python3-venv \

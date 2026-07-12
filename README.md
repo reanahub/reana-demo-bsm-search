@@ -196,6 +196,11 @@ After testing it locally, push the image to GHCR:
 $ docker push ghcr.io/clelange/reana-demo-bsm-search:2.0.0
 ```
 
+The OCI source label in the Dockerfile associates the image with this GitHub
+repository. It is set explicitly because Docker images inherit labels from
+their base image; without the override, GHCR would associate this image with
+the repository that built the ROOT base image.
+
 When publishing from an ARM-based development machine, keep
 `--platform linux/amd64`: REANA QA executes AMD64 images.
 
