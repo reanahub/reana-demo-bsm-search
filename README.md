@@ -49,18 +49,17 @@ using the experiment-internal software stack (e.g. CMSSW or the ATLAS Analysis
 Releases) and be based on C++ with many dependencies and require multiple
 container images. In this emulation we have two container images.
 
-1. The ROOT6 image `docker.io/reanahub/reana-env-root6` is used for merging ROOT
-   files.
-1. The image `docker.io/reanahub/reana-demo-bsm-search` extends ROOT6 with the
-   `hftools` package. It is used for generation, selection, histogramming,
-   fitting, plotting, and exporting to HEPData.
+1. The ROOT6 image `ghcr.io/clelange/root` is used for merging ROOT files.
+1. The image `ghcr.io/clelange/reana-demo-bsm-search` extends the same ROOT6
+   image with the `hftools` package. It is used for generation, selection,
+   histogramming, fitting, plotting, and exporting to HEPData.
 
 #### [generantuple.py](code/generantuple.py) - Generating Toy Data
 
 This script generates toy datasets needed for the analysis. The script has the
 command line interface
 
-`python code/generantuple.py {type} {nevents} {outputfile} [seed] [configfile]`,
+`python3 code/generantuple.py {type} {nevents} {outputfile} [seed] [configfile]`,
 
 where `{type}` can be one of `[data, mc1, mc2, qcd, sig]` generating "observed
 data", two background processes "mc1" or "mc2", a "multijet-background" and
@@ -87,7 +86,7 @@ events. In a real analysis this would be the bulk of the analysis code
 implemented in a C++ experiment framework. In this example, the cli structure of
 the script is
 
-`python code/select.py {inputfile} {outputfile} {region} var1,var2,... [seed] [configfile]`
+`python3 code/select.py {inputfile} {outputfile} {region} var1,var2,... [seed] [configfile]`
 
 where an input and output files are specified as well as the region (i.e. either
 signal or control region) and a number of comma-delimited systematic variations
@@ -107,7 +106,7 @@ This script reads in the TNtuple of the selected events and creates the required
 histograms for building the statistical model and weights them to a specific
 luminosity. The command structure is
 
-`python code/histogram.py {inputfile} {outputfile} {name} {weight} var,var2,...`
+`python3 code/histogram.py {inputfile} {outputfile} {name} {weight} var,var2,...`
 
 the variations in this case are weight-only variations.
 
@@ -121,7 +120,7 @@ strength). For fitting and plotting the resulting workspace we use an external
 package called `hftools` (HistFactory tools), which provides command line tools
 for these purposes. The command line structure is
 
-`python code/makews.py {data_bkg_hists} {workspace_prefix} {xml_dir} [configfile]`
+`python3 code/makews.py {data_bkg_hists} {workspace_prefix} {xml_dir} [configfile]`
 
 The script expects all data and background histograms to be collected in a
 single ROOT file and writes the XML configuration and workspace to the paths
@@ -138,7 +137,7 @@ functions to generated HepData tables from a `RooWorkspace`.
 
 The command line structure is:
 
-`python code/hepdata_export.py {combined_model} [submission] [data] [configfile]`
+`python3 code/hepdata_export.py {combined_model} [submission] [data] [configfile]`
 
 The optional configuration makes the exported sample list follow the configured
 backgrounds. Omitting it preserves the original `mc1` and `mc2` defaults.
@@ -150,53 +149,55 @@ need to "encapsulate the current compute environment", for example to freeze the
 ROOT version our analysis is using. We shall achieve this by preparing a
 [Docker](https://www.docker.com/) container image for our analysis steps.
 
-Some of the analysis steps will run in a pure [ROOT](https://root.cern.ch/)
-analysis environment. We can use an already existing container image, for
-example [reana-env-root6](https://github.com/reanahub/reana-env-root6), for
-these steps.
+Some analysis steps only need a [ROOT](https://root.cern.ch/) environment. This
+workflow uses `ghcr.io/clelange/root:6.38.04-ubuntu24.04`, which provides ROOT,
+PyROOT, and Python 3.12 for Linux AMD64.
 
-Some of the other analysis tasks wil need `hftools` Python library installed
-that our Python code needs. We can extend the `reana-env-root6` image to install
-`hftools` and to include our own Python code. This can be achieved as follows:
+Other tasks also need the `hftools` Python library. The PyPI release was written
+for Python 2, so the environment installs a
+[minimal Python 3 compatibility fork](https://github.com/clelange/hftools/tree/feat/python3-compatibility)
+from an immutable commit. The analysis code itself is not copied into the image:
+Snakemake and REANA provide it through the workflow workspace. This keeps code
+changes separate from environment changes.
 
 ```console
 $ less environments/reana-demo-bsm-search/Dockerfile
 ```
 
 ```Dockerfile
-# Start from the ROOT6 base image:
-FROM docker.io/reanahub/reana-env-root6:6.18.04
+FROM ghcr.io/clelange/root:6.38.04-ubuntu24.04@sha256:e2e6e95b610ac79cc6591920c1adc172a36ed04d903226c8f5d7826c6ef96dd4
 
-# Install HFtools and its dependencies:
-RUN apt-get -y update && \
-    apt-get -y install \
-       libyaml-dev \
-       python-numpy \
-       zip && \
-    apt-get autoremove -y && \
-    apt-get clean -y
-RUN pip install hftools==0.0.6
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y python3-venv zip && \
+    rm -rf /var/lib/apt/lists/*
 
-# Mount our code:
-ADD code /code
-WORKDIR /code
+RUN python3 -m venv --system-site-packages /opt/reana-venv
+ENV PATH="/opt/reana-venv/bin:${PATH}"
+
+RUN python3 -m pip install --no-cache-dir \
+    "hftools @ https://github.com/clelange/hftools/archive/bbd0410f7106aa591ae01f11cfbc942b5fcddf85.tar.gz" \
+    "brewer2mpl==1.4.1" \
+    "click==8.4.2"
 ```
 
 We can build our analysis environment image and give it a name
-`docker.io/reanahub/reana-demo-bsm-search`:
+`ghcr.io/clelange/reana-demo-bsm-search`:
 
 ```console
-$ docker build -f environment/Dockerfile -t docker.io/reanahub/reana-demo-bsm-search .
+$ docker buildx build --platform linux/amd64 \
+    -f environments/reana-demo-bsm-search/Dockerfile \
+    -t ghcr.io/clelange/reana-demo-bsm-search:2.0.0 \
+    --load .
 ```
 
-We can push the image to the DockerHub image registry:
+After testing it locally, push the image to GHCR:
 
 ```console
-$ docker push docker.io/reanahub/reana-demo-bsm-search
+$ docker push ghcr.io/clelange/reana-demo-bsm-search:2.0.0
 ```
 
-(Note that typically you would use your own username such as `johndoe` in place
-of `reanahub`.)
+When publishing from an ARM-based development machine, keep
+`--platform linux/amd64`: REANA QA executes AMD64 images.
 
 ### 4. Analysis workflow
 
@@ -338,10 +339,11 @@ histograms events (with a couple of merge stages in between).
 #### Putting everything together
 
 The [configuration file](workflow/config.yaml) defines event chunks, sample
-weights, containers, systematic variations, and the base random seed. It is
-validated against [config.schema.yaml](workflow/config.schema.yaml) while the
-Snakefile is parsed, so misspelled keys and incomplete systematic pairs fail
-before any jobs are submitted.
+weights, containers, systematic variations, and the base random seed. Its
+expected structure is documented by
+[config.schema.yaml](workflow/config.schema.yaml). Automatic schema validation
+inside the Snakefile is temporarily disabled for REANA; see the compatibility
+note below.
 
 The REANA 0.95 prerelease currently has a dependency conflict affecting this
 Snakemake 9 validation API. See the
@@ -350,8 +352,8 @@ reproduction and proposed upstream action.
 
 ```yaml
 containers:
-  analysis: docker://docker.io/reanahub/reana-demo-bsm-search:1.0.0
-  root: docker://docker.io/reanahub/reana-env-root6:6.18.04
+  analysis: docker://ghcr.io/clelange/reana-demo-bsm-search:2.0.0
+  root: docker://ghcr.io/clelange/root:6.38.04-ubuntu24.04
 
 workdir: work
 random_seed: 12345

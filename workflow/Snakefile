@@ -3,12 +3,7 @@ import json
 import math
 import re
 
-from snakemake.utils import validate
-
-
 configfile: "workflow/config.yaml"
-
-validate(config, "config.schema.yaml")
 
 
 WORKDIR = config["workdir"]
@@ -207,8 +202,7 @@ rule generate:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {params.gentype:q} {params.nevents} {output:q} {params.seed} {params.generator_config:q}
+            python3 {input.script:q} {params.gentype:q} {params.nevents} {output:q} {params.seed} {params.generator_config:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -225,7 +219,6 @@ rule merge_generated:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
         """
@@ -246,8 +239,7 @@ rule select_data:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.data:q} {output:q} {wildcards.region:q} {params.variations:q}
+            python3 {input.script:q} {input.data:q} {output:q} {wildcards.region:q} {params.variations:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -264,7 +256,6 @@ rule merge_selected_data:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
         """
@@ -289,8 +280,7 @@ rule histogram_data:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
+            python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -308,7 +298,6 @@ rule merge_data_histograms:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
         """
@@ -329,8 +318,7 @@ rule select_signal:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.data:q} {output:q} signal {params.variations:q}
+            python3 {input.script:q} {input.data:q} {output:q} signal {params.variations:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -347,7 +335,6 @@ rule merge_selected_signal:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
         """
@@ -370,8 +357,7 @@ rule histogram_signal:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
+            python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -394,8 +380,7 @@ rule select_background_weight_variations:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.data:q} {output:q} signal {params.variations:q} -1 {params.variation_config:q}
+            python3 {input.script:q} {input.data:q} {output:q} signal {params.variations:q} -1 {params.variation_config:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -414,7 +399,6 @@ rule merge_background_weight_selection:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
         """
@@ -438,8 +422,7 @@ rule histogram_background_weights:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.data:q} {output:q} {wildcards.sample:q} {params.weight} {params.variations:q}
+            python3 {input.script:q} {input.data:q} {output:q} {wildcards.sample:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -469,8 +452,7 @@ rule select_background_shape_variation:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.data:q} {output:q} signal {wildcards.shapevar:q} {params.seed} {params.variation_config:q}
+            python3 {input.script:q} {input.data:q} {output:q} signal {wildcards.shapevar:q} {params.seed} {params.variation_config:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -489,7 +471,6 @@ rule merge_background_shape_selection:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
         """
@@ -515,8 +496,7 @@ rule histogram_background_shape:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q} {params.template:q}
+            python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q} {params.template:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -542,7 +522,6 @@ rule merge_background_sample_histograms:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
         """
@@ -563,7 +542,6 @@ rule merge_background_histograms:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
         """
@@ -583,7 +561,6 @@ rule merge_analysis_histograms:
     shell:
         """
         (
-            source /usr/local/bin/thisroot.sh
             hadd -f {output:q} {input.signal:q} {input.data:q} {input.background:q}
         ) 2>&1 | tee {log:q}
         """
@@ -609,8 +586,7 @@ rule make_workspace:
             workspace_prefix={output.workspace:q}
             workspace_prefix="${{workspace_prefix%_combined_meas_model.root}}"
             mkdir -p "$(dirname {output.workspace:q})" {output.xml:q}
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.histograms:q} "$workspace_prefix" {output.xml:q} {params.model_config:q}
+            python3 {input.script:q} {input.histograms:q} "$workspace_prefix" {output.xml:q} {params.model_config:q}
         ) 2>&1 | tee {log:q}
         """
 
@@ -633,7 +609,6 @@ rule plot:
         """
         (
             mkdir -p plot
-            source /usr/local/bin/thisroot.sh
             hfquickplot write-vardef {input.workspace:q} combined {output.nominal_vals:q}
             hfquickplot plot-channel {input.workspace:q} combined channel1 x {output.nominal_vals:q} -c {params.components:q} -o {output.prefit:q}
             hfquickplot fit {input.workspace:q} combined {output.fit_results:q}
@@ -660,8 +635,7 @@ rule hepdata:
         """
         (
             mkdir -p hepdata
-            source /usr/local/bin/thisroot.sh
-            python {input.script:q} {input.workspace:q} {output.submission:q} {output.data:q} {params.model_config:q}
+            python3 {input.script:q} {input.workspace:q} {output.submission:q} {output.data:q} {params.model_config:q}
             zip -j {output.zip:q} {output.submission:q} {output.data:q}
         ) 2>&1 | tee {log:q}
         """

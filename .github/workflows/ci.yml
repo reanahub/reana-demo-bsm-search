@@ -28,8 +28,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install reana-client
-          pip install reana-commons
+          pip install reana-client==0.95.0a5
 
       - name: Validate Snakemake workflow
         run: |
@@ -39,28 +38,44 @@ jobs:
       - name: Build analysis environment image
         run:
           docker build -f environments/reana-demo-bsm-search/Dockerfile -t
-          reanahub/reana-demo-bsm-search .
+          reana-demo-bsm-search:test .
 
       - name: Validate workflow specification file
         run: reana-client validate
 
-      - name: Test whether the ROOT version is well 6
+      - name: Test ROOT and PyROOT versions
         run:
-          docker run -i --rm -v `pwd`/code:/code reanahub/reana-demo-bsm-search
-          root-config --version | grep -q ^6
+          docker run --rm reana-demo-bsm-search:test /bin/bash -c 'test
+          "$(root-config --version)" = "6.38.04" && python3 -c "import ROOT;
+          assert ROOT.gROOT.GetVersion() == \"6.38.04\""'
 
-      - name: Test whether we can import hftools Python library
+      - name: Test hftools Python library and commands
         run:
-          docker run -i --rm -v `pwd`/code:/code reanahub/reana-demo-bsm-search
-          /bin/bash -c 'source /usr/local/bin/thisroot.sh && python -c "import
-          hftools.hepdata"'
+          docker run --rm reana-demo-bsm-search:test /bin/bash -c 'python3 -c
+          "import hftools.hepdata" && hfquickplot --help >/dev/null &&
+          hfhdrootcnv --help >/dev/null'
 
-      - name:
-          Test whether the latest analysis code is well present inside the
-          container
+      - name: Test analysis code in the container
         run:
-          docker run -i --rm -v `pwd`/code:/newcode
-          reanahub/reana-demo-bsm-search diff -r /code /newcode
+          docker run --rm -v "${PWD}:/workspace" -w /workspace
+          reana-demo-bsm-search:test /bin/bash -c 'python3 code/generantuple.py
+          sig 10 /tmp/generated.root 123 workflow/config.yaml && python3 -c
+          "import ROOT; f = ROOT.TFile.Open(\"/tmp/generated.root\"); assert
+          f.Get(\"ntuple\").GetEntries() == 10"'
+
+      - name: Run containerized workflow smoke test
+        run: |
+          smoke_dir=$(mktemp -d)
+          cp -R code workflow "${smoke_dir}/"
+          sed -i 's/20000/100/g; s/40000/100/g' "${smoke_dir}/workflow/config.yaml"
+          docker run --rm -v "${smoke_dir}:/workspace" -w /workspace \
+            reana-demo-bsm-search:test /bin/bash -c '
+              python3 -m pip install --disable-pip-version-check snakemake==9.23.1 >/dev/null &&
+              snakemake --snakefile workflow/Snakefile --cores 4 --quiet progress rules
+            '
+          test -s "${smoke_dir}/plot/prefit.pdf"
+          test -s "${smoke_dir}/plot/postfit.pdf"
+          test -s "${smoke_dir}/hepdata/submission.zip"
 
   format-prettier:
     runs-on: ubuntu-24.04

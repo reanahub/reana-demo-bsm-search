@@ -13,6 +13,11 @@ when a Snakemake 9 workflow calls `snakemake.utils.validate()`:
 The workflow itself passes `snakemake --lint` and `snakemake --dry-run` in its
 Pixi environment with Snakemake 9.
 
+The call to `snakemake.utils.validate()` is therefore temporarily disabled in
+the Snakefile. The schema remains in the repository both as documentation and so
+that standard validation can be restored when the REANA dependency conflict is
+resolved.
+
 ## Reproduction
 
 Install the prerelease client and validate this repository:
@@ -66,9 +71,18 @@ Suggested issue title:
 
 Once an upstream issue exists, add its link to this document.
 
-## Local workarounds considered
+## Current workflow workaround
 
-The workflow could avoid `snakemake.utils.validate()` and perform custom Draft 7
-validation directly. This was not adopted because it would replace the standard
-Snakemake idiom with project-specific validation code and conceal an invalid
-REANA prerelease dependency combination.
+The workflow avoids calling `snakemake.utils.validate()` on REANA. It does not
+replace it with custom Draft 7 validation, because that would replace the
+standard Snakemake idiom with project-specific validation code and conceal the
+invalid REANA prerelease dependency combination.
+
+With the call removed, REANA QA successfully parses the Snakefile and builds the
+complete 63-job DAG. The standard prerelease client still cannot submit the
+workflow directly because the REANA Snakemake loader includes Python callables
+from dynamic rule parameters in the JSON request. A one-off submission test
+replaced those callables only in the client-generated metadata; the workflow
+engine continued to execute the original Snakefile. This serialization problem
+is separate from the `jsonschema` dependency conflict and should be fixed in
+REANA's Snakemake integration.
