@@ -78,6 +78,24 @@ replace it with custom Draft 7 validation, because that would replace the
 standard Snakemake idiom with project-specific validation code and conceal the
 invalid REANA prerelease dependency combination.
 
+REANA's Snakemake 9 remote executor also currently submits each rule's raw
+shell command without first creating the parent directories of its outputs and
+logs. The Snakefile temporarily wraps shell commands with directory preparation
+in `shell_with_directories()`. This should be removed when the executor performs
+Snakemake's normal pre-job directory preparation.
+
+This requires a fix in
+[`reanahub/reana-workflow-engine-snakemake`](https://github.com/reanahub/reana-workflow-engine-snakemake).
+A minimal remote rule fails before executing its command with, for example:
+
+```text
+bash: line 2: logs/generate/mc2/0.log: No such file or directory
+```
+
+Suggested issue title:
+
+> Remote executor does not prepare output and log parent directories
+
 With the call removed, REANA QA successfully parses the Snakefile and builds the
 complete 63-job DAG. The standard prerelease client still cannot submit the
 workflow directly because the REANA Snakemake loader includes Python callables
@@ -86,3 +104,8 @@ replaced those callables only in the client-generated metadata; the workflow
 engine continued to execute the original Snakefile. This serialization problem
 is separate from the `jsonschema` dependency conflict and should be fixed in
 REANA's Snakemake integration.
+
+On 2026-07-12, the complete workflow ran successfully on REANA QA as
+`reana-demo-bsm-snakemake-20260712-133953.3`, using `reana-client==0.95.0a5`
+and REANA server `0.95.0a6`. All 62 executable jobs finished, and the resulting
+prefit and postfit PDFs and HEPData ZIP archive were downloaded and verified.

@@ -12,6 +12,21 @@ SYSTEMATICS = config["systematics"]
 RANDOM_SEED = config["random_seed"]
 
 
+def shell_with_directories(command):
+    """Prepare output and log parents before a remote REANA job starts.
+
+    Snakemake normally creates these directories before executing a shell rule.
+    REANA's Snakemake 9 remote executor currently submits the raw command
+    without that preparation, so each remote job must perform it itself. Keep
+    this compatibility wrapper centralized so it can be removed once the
+    executor restores the standard Snakemake behaviour.
+    """
+    return (
+        f"mkdir -p $(dirname {{output:q}}) $(dirname {{log:q}})\n"
+        f"{command}"
+    )
+
+
 def systematic_variations(systematic_type):
     return [
         variation["name"]
@@ -200,11 +215,11 @@ rule generate:
     container:
         config["containers"]["analysis"]
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {params.gentype:q} {params.nevents} {output:q} {params.seed} {params.generator_config:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_generated:
@@ -217,11 +232,11 @@ rule merge_generated:
     container:
         config["containers"]["root"]
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule select_data:
@@ -237,11 +252,11 @@ rule select_data:
     container:
         config["containers"]["analysis"]
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {input.data:q} {output:q} {wildcards.region:q} {params.variations:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_selected_data:
@@ -254,11 +269,11 @@ rule merge_selected_data:
     container:
         config["containers"]["root"]
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule histogram_data:
@@ -278,11 +293,11 @@ rule histogram_data:
     container:
         config["containers"]["analysis"]
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_data_histograms:
@@ -296,11 +311,11 @@ rule merge_data_histograms:
     container:
         config["containers"]["root"]
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule select_signal:
@@ -316,11 +331,11 @@ rule select_signal:
     container:
         config["containers"]["analysis"]
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {input.data:q} {output:q} signal {params.variations:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_selected_signal:
@@ -333,11 +348,11 @@ rule merge_selected_signal:
     container:
         config["containers"]["root"]
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule histogram_signal:
@@ -355,11 +370,11 @@ rule histogram_signal:
     container:
         config["containers"]["analysis"]
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule select_background_weight_variations:
@@ -378,11 +393,11 @@ rule select_background_weight_variations:
     wildcard_constraints:
         sample=BACKGROUND_PATTERN,
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {input.data:q} {output:q} signal {params.variations:q} -1 {params.variation_config:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_background_weight_selection:
@@ -397,11 +412,11 @@ rule merge_background_weight_selection:
     wildcard_constraints:
         sample=BACKGROUND_PATTERN,
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule histogram_background_weights:
@@ -420,11 +435,11 @@ rule histogram_background_weights:
     wildcard_constraints:
         sample=BACKGROUND_PATTERN,
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {input.data:q} {output:q} {wildcards.sample:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule select_background_shape_variation:
@@ -450,11 +465,11 @@ rule select_background_shape_variation:
     wildcard_constraints:
         sample=BACKGROUND_PATTERN,
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {input.data:q} {output:q} signal {wildcards.shapevar:q} {params.seed} {params.variation_config:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_background_shape_selection:
@@ -469,11 +484,11 @@ rule merge_background_shape_selection:
     wildcard_constraints:
         sample=BACKGROUND_PATTERN,
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule histogram_background_shape:
@@ -494,11 +509,11 @@ rule histogram_background_shape:
     wildcard_constraints:
         sample=BACKGROUND_PATTERN,
     shell:
-        """
+        shell_with_directories("""
         (
             python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q} {params.template:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_background_sample_histograms:
@@ -520,11 +535,11 @@ rule merge_background_sample_histograms:
     wildcard_constraints:
         sample=BACKGROUND_PATTERN,
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_background_histograms:
@@ -540,11 +555,11 @@ rule merge_background_histograms:
     container:
         config["containers"]["root"]
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule merge_analysis_histograms:
@@ -559,11 +574,11 @@ rule merge_analysis_histograms:
     container:
         config["containers"]["root"]
     shell:
-        """
+        shell_with_directories("""
         (
             hadd -f {output:q} {input.signal:q} {input.data:q} {input.background:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule make_workspace:
@@ -581,14 +596,14 @@ rule make_workspace:
     container:
         config["containers"]["analysis"]
     shell:
-        """
+        shell_with_directories("""
         (
             workspace_prefix={output.workspace:q}
             workspace_prefix="${{workspace_prefix%_combined_meas_model.root}}"
             mkdir -p "$(dirname {output.workspace:q})" {output.xml:q}
             python3 {input.script:q} {input.histograms:q} "$workspace_prefix" {output.xml:q} {params.model_config:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule plot:
@@ -606,7 +621,7 @@ rule plot:
     container:
         config["containers"]["analysis"]
     shell:
-        """
+        shell_with_directories("""
         (
             mkdir -p plot
             hfquickplot write-vardef {input.workspace:q} combined {output.nominal_vals:q}
@@ -614,7 +629,7 @@ rule plot:
             hfquickplot fit {input.workspace:q} combined {output.fit_results:q}
             hfquickplot plot-channel {input.workspace:q} combined channel1 x {output.fit_results:q} -c {params.components:q} -o {output.postfit:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
 
 
 rule hepdata:
@@ -632,10 +647,10 @@ rule hepdata:
     container:
         config["containers"]["analysis"]
     shell:
-        """
+        shell_with_directories("""
         (
             mkdir -p hepdata
             python3 {input.script:q} {input.workspace:q} {output.submission:q} {output.data:q} {params.model_config:q}
             zip -j {output.zip:q} {output.submission:q} {output.data:q}
         ) 2>&1 | tee {log:q}
-        """
+        """)
