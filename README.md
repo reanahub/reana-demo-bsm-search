@@ -49,17 +49,18 @@ using the experiment-internal software stack (e.g. CMSSW or the ATLAS Analysis
 Releases) and be based on C++ with many dependencies and require multiple
 container images. In this emulation we have two container images.
 
-1. A pure ROOT6 container image `docker.io/reanahub/reana-demo-bsm-search` used
-   for most steps (such as selection, merging etc) 1. An image based on ROOT6
-   which also has the `hftools` package installed. This image is used for the
-   last steps dealing with fitting, plotting and exporting to HepData
+1. The ROOT6 image `docker.io/reanahub/reana-env-root6` is used for merging ROOT
+   files.
+1. The image `docker.io/reanahub/reana-demo-bsm-search` extends ROOT6 with the
+   `hftools` package. It is used for generation, selection, histogramming,
+   fitting, plotting, and exporting to HEPData.
 
 #### [generantuple.py](code/generantuple.py) - Generating Toy Data
 
 This script generates toy datasets needed for the analysis. The script has the
 command line interface
 
-`python /code/generantuple.py {type} {nevents} {outputfile}`,
+`python code/generantuple.py {type} {nevents} {outputfile} [seed] [configfile]`,
 
 where `{type}` can be one of `[data, mc1, mc2, qcd, sig]` generating "observed
 data", two background processes "mc1" or "mc2", a "multijet-background" and
@@ -69,6 +70,11 @@ of the other three processes according to their respective cross sections.
 The dataset which is a collection of "events" (the number of events is
 controlled by the `{nevents}` parameters) which is stored in a ROOT TNtuple at
 the path indicated by `{outputfilename}`.
+
+The optional seed makes the generated events reproducible. Omitting it, or
+passing `-1`, uses Python's non-deterministic default seeding. The optional
+configuration file supplies the toy distributions and observed-data mixture;
+omitting it preserves the original `mc1` and `mc2` defaults.
 
 Since dataset generation is easily parallelizable, ultimately we will run many
 of these jobs at the same time and merge the TNtuples via ROOT's `hadd` utility.
@@ -81,7 +87,7 @@ events. In a real analysis this would be the bulk of the analysis code
 implemented in a C++ experiment framework. In this example, the cli structure of
 the script is
 
-`python /code/select.py {inputfile} {outputfile} {region} var1,var2,...`
+`python code/select.py {inputfile} {outputfile} {region} var1,var2,... [seed] [configfile]`
 
 where an input and output files are specified as well as the region (i.e. either
 signal or control region) and a number of comma-delimited systematic variations
@@ -91,31 +97,37 @@ case only variations that affect the event selection need to be specified.
 Variations that only affect the event weights are dealt with in the
 histogramming step (see below).
 
+The seed is optional here as well. It affects the random shifts applied by shape
+variations. The optional configuration supplies the weight factors and shape
+shift ranges; omitting it preserves the original systematic definitions.
+
 #### [histogram.py](code/histogram.py) - Summarize Events in histograms
 
 This script reads in the TNtuple of the selected events and creates the required
 histograms for building the statistical model and weights them to a specific
 luminosity. The command structure is
 
-`python /code/histogram.py {inputfile} {outputfile} {name} {weight} var,var2,...`
+`python code/histogram.py {inputfile} {outputfile} {name} {weight} var,var2,...`
 
 the variations in this case are weight-only variations.
 
 #### [makews.py](code/makews.py) - Building a Statistical Model
 
 This script creates a `RooWorkspace` using the HistFactory p.d.f template. The
-HistFactory configuration has a single channel and four samples (qcd, mc1, mc2
-and signal). The parameter of interest in this model is the normalization of the
-signal sample (the signal strength). For fitting and plotting the resulting
-workspace we use an external package called `hftools` (HistFactory tools), which
-provides command line tools for these purposes and no additional code is needed
-from our side. The command line structure is
+HistFactory configuration has a single channel containing observed data, a
+data-driven QCD estimate, the configured simulated backgrounds, and a signal.
+The parameter of interest is the normalization of the signal sample (the signal
+strength). For fitting and plotting the resulting workspace we use an external
+package called `hftools` (HistFactory tools), which provides command line tools
+for these purposes. The command line structure is
 
-`python /code/makews.py {data_bkg_hists} {workspace_prefix} {xml_dir}`
+`python code/makews.py {data_bkg_hists} {workspace_prefix} {xml_dir} [configfile]`
 
 The script expects all data and background histograms to be collected in a
 single ROOT file and writes the XML configuration and workspace to the paths
-specified on the command line.
+specified on the command line. When a configuration file is supplied, the
+background samples and their systematic variations are read from it. Omitting
+the configuration preserves the original `mc1` and `mc2` defaults.
 
 #### [hepdata_export.py](code/hepdata_export.py) - Preparing a HepData submission
 
@@ -126,7 +138,10 @@ functions to generated HepData tables from a `RooWorkspace`.
 
 The command line structure is:
 
-`python /code/hepdata_export.py {combined_model}`
+`python code/hepdata_export.py {combined_model} [submission] [data] [configfile]`
+
+The optional configuration makes the exported sample list follow the configured
+backgrounds. Omitting it preserves the original `mc1` and `mc2` defaults.
 
 ### 3. Compute environment
 
@@ -235,26 +250,51 @@ each other. Once they are done the remaining steps needed are
 +-----------+                        +------------------+
 ```
 
+#### How the Snakefile expresses the workflow
+
+Snakemake works backwards from requested output files. The first rule,
+`rule all`, names the plots and HEPData archive that constitute a complete run.
+For each requested file, Snakemake finds a rule that can create it and continues
+following that rule's inputs until it has constructed the complete directed
+acyclic graph (DAG). Dependencies therefore follow from filenames instead of
+being listed as explicit stage-to-stage links.
+
+The workflow uses several common Snakemake features:
+
+- **Wildcards** such as `{sample}`, `{chunk}`, and `{shapevar}` generalise one
+  rule over many jobs. Wildcard constraints limit them to values supported by
+  the configuration.
+- **`expand()` and input functions** enumerate fan-in dependencies. For example,
+  a merge job obtains the generated chunks belonging to one batch from an input
+  function.
+- **Named inputs and outputs** make shell commands self-documenting. Analysis
+  scripts are named inputs too, so changing a script causes Snakemake to rerun
+  the affected jobs. The scripts keep their normal command-line interfaces and
+  can still be run manually.
+- **`container:` directives** associate every rule with its software image.
+  REANA uses these declarations to run each job in the requested environment.
+- **`log:` directives** retain per-job logs under `logs/` while `tee` also sends
+  the output to REANA's job logs.
+- **`temp()` outputs** identify disposable intermediate files under `work/`.
+  Snakemake removes a temporary file only after its final consumer succeeds.
+  This is safer and more storage-efficient than a manually ordered cleanup
+  stage.
+
 #### The Data Workflow
 
 The subworkflow generating and processing the "observed data" goes through these
 high-level stages.
 
-1. **Generating the Data** This stage generates data in a highly parallel
-   fashion and then merges the files into a smaller number of files. We do not
-   merge into a single file as this may end up being too large (currently merges
-   happen in batches of six) 1. **Processing Data in Signal Region** This branch
-   in the data workflow processes the data and selects and histograms events in
-   the signal region. This will be the data the model is fitted against. 1.
-   **Processing Data in Control Region for data-driven multijet estimate** This
-   branch selects and histograms events in the control region to estimate the
-   shape of the distribution and then uses a transfer factor which controls the
-   normalization of the distribution in the signal region. This results in a
-   so-called "data-driven" estimate the so-called "multijets" (or "qcd")
-   background, since it would be unfeasible to estimate it using Monte-Carlo
-   samples. 1. **Merge final results** Finally, the results are merged into a
-   single file that holds all the resulting histograms from the data
-   sub-workflow.
+1. **Generate the data.** Independent jobs generate data chunks. Merge jobs
+   combine at most six chunks at a time so that later processing does not depend
+   on an excessive number of files.
+1. **Process the signal region.** This branch selects and histograms the events
+   against which the statistical model is fitted.
+1. **Estimate multijet background from the control region.** This branch selects
+   and histograms control-region events, then applies a transfer factor to
+   estimate the multijet, or QCD, background in the signal region.
+1. **Merge the histograms.** The observed data and data-driven background are
+   collected in one ROOT file.
 
 #### The SM Background Workflow
 
@@ -276,9 +316,9 @@ For each sample, we go through the following stages
 1. Histogram Events (with correct luminosity weighting)
 
 As some systematics affect the variables that are cut on in the event selection
-( so-called shape variatiosn), the event selection step needs to be performed
-multiple times (once for each shape variations). Therefore, there is an
-additional sub-workflow for processing shape variations.
+(so-called shape variations), the event selection step needs to be performed
+multiple times, once for each variation. Therefore, there is an additional
+branch for processing shape variations.
 
 Systematics only affecting the weights can be implemented in one go at the
 histogramming stage.
@@ -297,40 +337,102 @@ histograms events (with a couple of merge stages in between).
 
 #### Putting everything together
 
-Using these sub-workflows, we assemble a composed workflow. In this example,
-there are no externally settable parameters, as the parameters for the three
-sub-workflows (data, backgrounds, signal) are fixed in the workflow spec.
+The [configuration file](workflow/config.yaml) defines event chunks, sample
+weights, containers, systematic variations, and the base random seed. It is
+validated against [config.schema.yaml](workflow/config.schema.yaml) while the
+Snakefile is parsed, so misspelled keys and incomplete systematic pairs fail
+before any jobs are submitted.
 
-The parameters for the subworkflows include information on how many events to
-generate and, in the case of signal and background, what the relative weight
-should be.
-
-```console
-$ head -20 workflow/config.yaml
+```yaml
 containers:
   analysis: docker://docker.io/reanahub/reana-demo-bsm-search:1.0.0
   root: docker://docker.io/reanahub/reana-env-root6:6.18.04
 
 workdir: work
+random_seed: 12345
 
 data:
   nevents: [20000, 20000, 20000, 20000, 20000]
   qcd_transfer_factor: 0.1875
+  control_region_fraction: 0.8
+  qcd_fraction: 0.75
+  qcd_generator: { loc: 5, scale: 4 }
 
 signal:
   nevents: [40000, 40000]
   weight: 0.0025
+  generator: { loc: 1, scale: 0.5 }
+
+backgrounds:
+  mc1:
+    nevents: [40000, 40000, 40000, 40000]
+    weight: 0.01875
+    data_fraction: 0.15
+    generator: { loc: -3, scale: 1.5 }
+
+systematics:
+  weight:
+    weight_var1:
+      up: { name: weight_var1_up, factor: 1.05 }
+      down: { name: weight_var1_dn, factor: 0.95 }
+  shape:
+    shape_conv:
+      up: { name: shape_conv_up, shift: [0, 1] }
+      down: { name: shape_conv_dn, shift: [-1, 0] }
 ```
 
-The workflow can be checked locally without executing ROOT jobs:
+Background names are not hard-coded in the workflow, generator, or
+workspace-building script. Adding another entry below `backgrounds` creates its
+generation, selection, histogram, model, and plotting jobs. Its `generator`
+defines the toy normal distribution and `data_fraction` defines its contribution
+to observed data in the signal region. The background fractions together with
+`data.qcd_fraction` must sum to one. Each systematic is expressed as an explicit
+up/down pair. Weight variations define a multiplicative `factor`; shape
+variations define a uniformly sampled `shift` interval. These definitions are
+used both to create the variation histograms and to configure the HistFactory
+model.
+
+`random_seed` is a base seed rather than the seed passed to every job. The
+Snakefile derives a stable, distinct seed from the base seed and the job's
+sample, chunk, and variation. This makes results independent of scheduling
+order. Set it to `-1` to disable deterministic seeding.
+
+#### Checking and visualising the workflow locally
+
+The included [Pixi](https://pixi.sh/) environment provides Snakemake and
+Graphviz. A dry run constructs and prints the DAG without executing ROOT jobs:
 
 ```console
+$ pixi install
 $ pixi run snakemake-dry-run
 ```
 
-Please see the [Snakefile](workflow/Snakefile),
-[configuration file](workflow/config.yaml), and related
-[Snakemake documentation](https://snakemake.readthedocs.io/).
+Run the Snakemake linter and regenerate the DAG image with:
+
+```console
+$ pixi run snakemake-lint
+$ pixi run workflow-dag
+```
+
+#### Running locally with containers
+
+The Pixi tasks above inspect the workflow but do not run its containerised ROOT
+jobs. On a Linux machine with Apptainer installed, the complete workflow can be
+run with:
+
+```console
+$ pixi run snakemake -s workflow/Snakefile --cores 4 \
+    --software-deployment-method apptainer
+```
+
+Without `--software-deployment-method apptainer`, local Snakemake ignores the
+`container:` directives and expects ROOT and `hftools` to be installed in the
+local environment. On REANA, the workflow engine interprets the container
+declarations directly, so no local Apptainer installation is needed.
+
+Please see the [Snakefile](workflow/Snakefile) and the
+[Snakemake documentation](https://snakemake.readthedocs.io/) for further
+details.
 
 ### 5. Output results
 

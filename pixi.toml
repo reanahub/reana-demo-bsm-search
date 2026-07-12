@@ -8,6 +8,7 @@ platforms = ["linux-64", "osx-64", "osx-arm64"]
 
 [tasks]
 snakemake-dry-run = "snakemake -s workflow/Snakefile --dry-run --cores 1"
+snakemake-lint = "snakemake -s workflow/Snakefile --lint"
 workflow-dag = "dot -c && snakemake -s workflow/Snakefile --dry-run --dag --quiet | sed -n '/^digraph/,$p' | dot -Tpng > docs/workflow.png"
 
 [dependencies]

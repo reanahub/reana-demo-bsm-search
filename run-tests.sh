@@ -56,7 +56,7 @@ lint_commitlint() {
 }
 
 lint_markdownlint() {
-    markdownlint-cli2 "**/*.md"
+    markdownlint-cli2 "**/*.md" "#.pixi/**" "#.snakemake/**"
 }
 
 lint_shellcheck() {

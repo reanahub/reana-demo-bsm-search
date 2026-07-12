@@ -1,4 +1,4 @@
-import os
+import json
 import sys
 
 import ROOT
@@ -26,13 +26,20 @@ data_license: # (optional) you can specify a license for the data
   description: "Tell me about it. This can appear in the main record display" # (optional)
 '''
 
+
+def load_backgrounds(source):
+    if source is None:
+        return ["mc1", "mc2"]
+    if source.lstrip().startswith("{"):
+        return json.loads(source)["backgrounds"]
+    with open(source) as config_file:
+        return list(yaml.safe_load(config_file)["backgrounds"])
+
+
 def main():
-    sampledef = [
-        ('signal', {'systs': {}, 'HFname': 'signal'}),
-        ('mc1', {'systs': {}, 'HFname': 'mc1'}),
-        ('mc2', {'systs': {}, 'HFname': 'mc2'}),
-        ('qcd', {'systs': {}, 'HFname': 'qcd'}),
-    ]
+    backgrounds = load_backgrounds(sys.argv[4] if len(sys.argv) > 4 else None)
+    sample_names = ["signal", *backgrounds, "qcd"]
+    sampledef = [(name, {"systs": {}, "HFname": name}) for name in sample_names]
 
     rootfile = sys.argv[1]
     try:

@@ -1,16 +1,106 @@
+import hashlib
+import json
 import math
+import re
+
+from snakemake.utils import validate
 
 
 configfile: "workflow/config.yaml"
 
-shell.executable("/bin/bash")
+validate(config, "config.schema.yaml")
 
 
 WORKDIR = config["workdir"]
 BACKGROUND_SAMPLES = list(config["backgrounds"])
-SHAPE_VARIATIONS = config["shape_variations"]
-WEIGHT_VARIATIONS = config["weight_variations"]
-SHAPE_VARIATION_PATTERN = "|".join(SHAPE_VARIATIONS)
+SYSTEMATICS = config["systematics"]
+RANDOM_SEED = config["random_seed"]
+
+
+def systematic_variations(systematic_type):
+    return [
+        variation["name"]
+        for systematic in SYSTEMATICS[systematic_type].values()
+        for variation in (systematic["up"], systematic["down"])
+    ]
+
+
+def variation_definitions():
+    definitions = {}
+    for variation_type, systematics in SYSTEMATICS.items():
+        for systematic in systematics.values():
+            for variation in (systematic["up"], systematic["down"]):
+                name = variation["name"]
+                if name in definitions:
+                    raise ValueError(f"Duplicate systematic variation name: {name}")
+                shift = variation.get("shift")
+                if shift is not None and shift[0] > shift[1]:
+                    raise ValueError(
+                        f"Invalid shift range for {name}: {shift}"
+                    )
+                definitions[name] = {
+                    "type": variation_type,
+                    **{
+                        key: value
+                        for key, value in variation.items()
+                        if key != "name"
+                    },
+                }
+    return definitions
+
+
+SHAPE_VARIATIONS = systematic_variations("shape")
+WEIGHT_VARIATIONS = ["nominal", *systematic_variations("weight")]
+VARIATION_CONFIG = json.dumps(variation_definitions(), sort_keys=True)
+SHAPE_VARIATION_PATTERN = (
+    "|".join(map(re.escape, SHAPE_VARIATIONS)) or r"(?!)"
+)
+SAMPLE_PATTERN = "|".join(
+    map(re.escape, ["data", "signal", *BACKGROUND_SAMPLES])
+)
+BACKGROUND_PATTERN = "|".join(map(re.escape, BACKGROUND_SAMPLES))
+PLOT_COMPONENTS = ",".join(["qcd", *reversed(BACKGROUND_SAMPLES), "signal"])
+DATA_FRACTION_SUM = config["data"]["qcd_fraction"] + sum(
+    sample["data_fraction"] for sample in config["backgrounds"].values()
+)
+if not math.isclose(DATA_FRACTION_SUM, 1.0, rel_tol=0.0, abs_tol=1e-9):
+    raise ValueError(
+        "Background data fractions and data.qcd_fraction must sum to 1, "
+        f"but sum to {DATA_FRACTION_SUM}"
+    )
+
+MODEL_CONFIG = json.dumps(
+    {
+        "backgrounds": BACKGROUND_SAMPLES,
+        "systematics": SYSTEMATICS,
+    },
+    sort_keys=True,
+)
+GENERATOR_CONFIG = json.dumps(
+    {
+        "samples": {
+            **{
+                sample: sample_config["generator"]
+                for sample, sample_config in config["backgrounds"].items()
+            },
+            "qcd": config["data"]["qcd_generator"],
+            "sig": config["signal"]["generator"],
+        },
+        "data": {
+            "control_region_fraction": config["data"][
+                "control_region_fraction"
+            ],
+            "signal_region_composition": {
+                **{
+                    sample: sample_config["data_fraction"]
+                    for sample, sample_config in config["backgrounds"].items()
+                },
+                "qcd": config["data"]["qcd_fraction"],
+            },
+        },
+    },
+    sort_keys=True,
+)
 
 GENERATED_BATCH_SIZE = {
     "data": 6,
@@ -31,6 +121,14 @@ def generated_batches(sample):
     return range(math.ceil(generated_count(sample) / GENERATED_BATCH_SIZE[sample]))
 
 
+def derived_seed(*parts):
+    """Derive a stable job-specific seed, or disable seeding with -1."""
+    if RANDOM_SEED < 0:
+        return -1
+    seed_material = ":".join(map(str, (RANDOM_SEED, *parts))).encode()
+    return int.from_bytes(hashlib.sha256(seed_material).digest()[:4], "big")
+
+
 def generated_files_for_batch(wildcards):
     sample = wildcards.sample
     batch = int(wildcards.batch)
@@ -38,7 +136,7 @@ def generated_files_for_batch(wildcards):
     start = batch * batch_size
     stop = min(start + batch_size, generated_count(sample))
     return expand(
-        WORKDIR + "/generated/{sample}/{chunk}.root",
+        f"{WORKDIR}/generated/{{sample}}/{{chunk}}.root",
         sample=sample,
         chunk=range(start, stop),
     )
@@ -65,7 +163,7 @@ def sample_weight(sample):
 
 def selected_batch_files(sample, selection_group):
     return expand(
-        WORKDIR + "/selected/{sample}/{selection_group}/batch{batch}.root",
+        f"{WORKDIR}/selected/{{sample}}/{{selection_group}}/batch{{batch}}.root",
         sample=sample,
         selection_group=selection_group,
         batch=generated_batches(sample),
@@ -75,6 +173,8 @@ def selected_batch_files(sample, selection_group):
 wildcard_constraints:
     batch = r"\d+",
     chunk = r"\d+",
+    region = r"signal|control",
+    sample = SAMPLE_PATTERN,
     shapevar = SHAPE_VARIATION_PATTERN,
 
 
@@ -85,18 +185,31 @@ rule all:
         "hepdata/submission.zip",
 
 
+# Files below WORKDIR are intermediate products. Marking them as temp() tells
+# Snakemake to remove each file after its final consumer has completed. This
+# keeps the shared workspace small without hard-coding a cleanup stage.
 rule generate:
+    input:
+        script="code/generantuple.py",
     output:
-        WORKDIR + "/generated/{sample}/{chunk}.root",
+        temp(f"{WORKDIR}/generated/{{sample}}/{{chunk}}.root"),
     params:
         gentype=generator_type,
         nevents=nevents_for_chunk,
+        generator_config=GENERATOR_CONFIG,
+        seed=lambda wildcards: derived_seed(
+            "generate", wildcards.sample, wildcards.chunk
+        ),
+    log:
+        "logs/generate/{sample}/{chunk}.log",
     container:
         config["containers"]["analysis"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/generantuple.py {params.gentype} {params.nevents} {output}
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {params.gentype:q} {params.nevents} {output:q} {params.seed} {params.generator_config:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
@@ -104,29 +217,38 @@ rule merge_generated:
     input:
         generated_files_for_batch,
     output:
-        WORKDIR + "/merged/generated/{sample}/batch{batch}.root",
+        temp(f"{WORKDIR}/merged/generated/{{sample}}/batch{{batch}}.root"),
+    log:
+        "logs/merge_generated/{sample}/batch{batch}.log",
     container:
         config["containers"]["root"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule select_data:
     input:
-        WORKDIR + "/merged/generated/data/batch{batch}.root",
+        data=f"{WORKDIR}/merged/generated/data/batch{{batch}}.root",
+        script="code/select.py",
     output:
-        WORKDIR + "/selected/data/{region}/batch{batch}.root",
+        temp(f"{WORKDIR}/selected/data/{{region}}/batch{{batch}}.root"),
     params:
         variations="nominal",
+    log:
+        "logs/select_data/{region}/batch{batch}.log",
     container:
         config["containers"]["analysis"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/select.py {input} {output} {wildcards.region} {params.variations}
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.data:q} {output:q} {wildcards.region:q} {params.variations:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
@@ -134,64 +256,82 @@ rule merge_selected_data:
     input:
         lambda wildcards: selected_batch_files("data", wildcards.region),
     output:
-        WORKDIR + "/merged/selected/data/{region}.root",
+        temp(f"{WORKDIR}/merged/selected/data/{{region}}.root"),
+    log:
+        "logs/merge_selected_data/{region}.log",
     container:
         config["containers"]["root"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule histogram_data:
     input:
-        WORKDIR + "/merged/selected/data/{region}.root",
+        data=f"{WORKDIR}/merged/selected/data/{{region}}.root",
+        script="code/histogram.py",
     output:
-        WORKDIR + "/hist/data/{region}.root",
+        temp(f"{WORKDIR}/hist/data/{{region}}.root"),
     params:
         name=lambda wildcards: "data" if wildcards.region == "signal" else "qcd",
         weight=lambda wildcards: 1.0
         if wildcards.region == "signal"
         else config["data"]["qcd_transfer_factor"],
         variations="nominal",
+    log:
+        "logs/histogram_data/{region}.log",
     container:
         config["containers"]["analysis"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/histogram.py {input} {output} {params.name} {params.weight} {params.variations}
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule merge_data_histograms:
     input:
-        WORKDIR + "/hist/data/signal.root",
-        WORKDIR + "/hist/data/control.root",
+        f"{WORKDIR}/hist/data/signal.root",
+        f"{WORKDIR}/hist/data/control.root",
     output:
-        WORKDIR + "/hists/data.root",
+        temp(f"{WORKDIR}/hists/data.root"),
+    log:
+        "logs/merge_data_histograms.log",
     container:
         config["containers"]["root"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule select_signal:
     input:
-        WORKDIR + "/merged/generated/signal/batch{batch}.root",
+        data=f"{WORKDIR}/merged/generated/signal/batch{{batch}}.root",
+        script="code/select.py",
     output:
-        WORKDIR + "/selected/signal/nominal/batch{batch}.root",
+        temp(f"{WORKDIR}/selected/signal/nominal/batch{{batch}}.root"),
     params:
         variations="nominal",
+    log:
+        "logs/select_signal/batch{batch}.log",
     container:
         config["containers"]["analysis"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/select.py {input} {output} signal {params.variations}
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.data:q} {output:q} signal {params.variations:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
@@ -199,61 +339,64 @@ rule merge_selected_signal:
     input:
         lambda wildcards: selected_batch_files("signal", "nominal"),
     output:
-        WORKDIR + "/merged/selected/signal/nominal.root",
+        temp(f"{WORKDIR}/merged/selected/signal/nominal.root"),
+    log:
+        "logs/merge_selected_signal.log",
     container:
         config["containers"]["root"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule histogram_signal:
     input:
-        WORKDIR + "/merged/selected/signal/nominal.root",
+        data=f"{WORKDIR}/merged/selected/signal/nominal.root",
+        script="code/histogram.py",
     output:
-        WORKDIR + "/hist/signal/nominal.root",
+        temp(f"{WORKDIR}/hists/signal.root"),
     params:
         name="signal",
-        weight=lambda wildcards: sample_weight("signal"),
+        weight=config["signal"]["weight"],
         variations="nominal",
+    log:
+        "logs/histogram_signal.log",
     container:
         config["containers"]["analysis"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/histogram.py {input} {output} {params.name} {params.weight} {params.variations}
-        """
-
-
-rule merge_signal_histograms:
-    input:
-        WORKDIR + "/hist/signal/nominal.root",
-    output:
-        WORKDIR + "/hists/signal.root",
-    container:
-        config["containers"]["root"]
-    shell:
-        """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule select_background_weight_variations:
     input:
-        WORKDIR + "/merged/generated/{sample}/batch{batch}.root",
+        data=f"{WORKDIR}/merged/generated/{{sample}}/batch{{batch}}.root",
+        script="code/select.py",
     output:
-        WORKDIR + "/selected/{sample}/weights/batch{batch}.root",
+        temp(f"{WORKDIR}/selected/{{sample}}/weights/batch{{batch}}.root"),
     params:
         variations=",".join(WEIGHT_VARIATIONS),
+        variation_config=VARIATION_CONFIG,
+    log:
+        "logs/select_background_weights/{sample}/batch{batch}.log",
     container:
         config["containers"]["analysis"]
+    wildcard_constraints:
+        sample=BACKGROUND_PATTERN,
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/select.py {input} {output} signal {params.variations}
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.data:q} {output:q} signal {params.variations:q} -1 {params.variation_config:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
@@ -261,44 +404,74 @@ rule merge_background_weight_selection:
     input:
         lambda wildcards: selected_batch_files(wildcards.sample, "weights"),
     output:
-        WORKDIR + "/merged/selected/{sample}/weights.root",
+        temp(f"{WORKDIR}/merged/selected/{{sample}}/weights.root"),
+    log:
+        "logs/merge_background_weights/{sample}.log",
     container:
         config["containers"]["root"]
+    wildcard_constraints:
+        sample=BACKGROUND_PATTERN,
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule histogram_background_weights:
     input:
-        WORKDIR + "/merged/selected/{sample}/weights.root",
+        data=f"{WORKDIR}/merged/selected/{{sample}}/weights.root",
+        script="code/histogram.py",
     output:
-        WORKDIR + "/hist/{sample}/weights.root",
+        temp(f"{WORKDIR}/hist/{{sample}}/weights.root"),
     params:
         weight=lambda wildcards: sample_weight(wildcards.sample),
         variations=",".join(WEIGHT_VARIATIONS),
+    log:
+        "logs/histogram_background_weights/{sample}.log",
     container:
         config["containers"]["analysis"]
+    wildcard_constraints:
+        sample=BACKGROUND_PATTERN,
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/histogram.py {input} {output} {wildcards.sample} {params.weight} {params.variations}
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.data:q} {output:q} {wildcards.sample:q} {params.weight} {params.variations:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule select_background_shape_variation:
     input:
-        WORKDIR + "/merged/generated/{sample}/batch{batch}.root",
+        data=f"{WORKDIR}/merged/generated/{{sample}}/batch{{batch}}.root",
+        script="code/select.py",
     output:
-        WORKDIR + "/selected/{sample}/{shapevar}/batch{batch}.root",
+        temp(
+            f"{WORKDIR}/selected/{{sample}}/{{shapevar}}/batch{{batch}}.root"
+        ),
+    params:
+        seed=lambda wildcards: derived_seed(
+            "shape",
+            wildcards.sample,
+            wildcards.shapevar,
+            wildcards.batch,
+        ),
+        variation_config=VARIATION_CONFIG,
+    log:
+        "logs/select_background_shape/{sample}/{shapevar}/batch{batch}.log",
     container:
         config["containers"]["analysis"]
+    wildcard_constraints:
+        sample=BACKGROUND_PATTERN,
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/select.py {input} {output} signal {wildcards.shapevar}
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.data:q} {output:q} signal {wildcards.shapevar:q} {params.seed} {params.variation_config:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
@@ -306,104 +479,139 @@ rule merge_background_shape_selection:
     input:
         lambda wildcards: selected_batch_files(wildcards.sample, wildcards.shapevar),
     output:
-        WORKDIR + "/merged/selected/{sample}/{shapevar}.root",
+        temp(f"{WORKDIR}/merged/selected/{{sample}}/{{shapevar}}.root"),
+    log:
+        "logs/merge_background_shape/{sample}/{shapevar}.log",
     container:
         config["containers"]["root"]
+    wildcard_constraints:
+        sample=BACKGROUND_PATTERN,
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule histogram_background_shape:
     input:
-        WORKDIR + "/merged/selected/{sample}/{shapevar}.root",
+        data=f"{WORKDIR}/merged/selected/{{sample}}/{{shapevar}}.root",
+        script="code/histogram.py",
     output:
-        WORKDIR + "/hist/{sample}/{shapevar}.root",
+        temp(f"{WORKDIR}/hist/{{sample}}/{{shapevar}}.root"),
     params:
         name=lambda wildcards: f"{wildcards.sample}_{wildcards.shapevar}",
         weight=lambda wildcards: sample_weight(wildcards.sample),
         variations="nominal",
         template=lambda wildcards: "{name}",
+    log:
+        "logs/histogram_background_shape/{sample}/{shapevar}.log",
     container:
         config["containers"]["analysis"]
+    wildcard_constraints:
+        sample=BACKGROUND_PATTERN,
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        python code/histogram.py {input} {output} {params.name} {params.weight} {params.variations} '{params.template}'
+        (
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q} {params.template:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule merge_background_sample_histograms:
     input:
         lambda wildcards: [
-            WORKDIR + "/hist/" + wildcards.sample + "/weights.root",
+            f"{WORKDIR}/hist/{wildcards.sample}/weights.root",
             *expand(
-                WORKDIR + "/hist/{sample}/{shapevar}.root",
+                f"{WORKDIR}/hist/{{sample}}/{{shapevar}}.root",
                 sample=wildcards.sample,
                 shapevar=SHAPE_VARIATIONS,
             ),
         ],
     output:
-        WORKDIR + "/hists/background/{sample}.root",
+        temp(f"{WORKDIR}/hists/background/{{sample}}.root"),
+    log:
+        "logs/merge_background_sample_histograms/{sample}.log",
     container:
         config["containers"]["root"]
+    wildcard_constraints:
+        sample=BACKGROUND_PATTERN,
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule merge_background_histograms:
     input:
         expand(
-            WORKDIR + "/hists/background/{sample}.root",
+            f"{WORKDIR}/hists/background/{{sample}}.root",
             sample=BACKGROUND_SAMPLES,
         ),
     output:
-        WORKDIR + "/hists/background.root",
+        temp(f"{WORKDIR}/hists/background.root"),
+    log:
+        "logs/merge_background_histograms.log",
     container:
         config["containers"]["root"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule merge_analysis_histograms:
     input:
-        signal=WORKDIR + "/hists/signal.root",
-        data=WORKDIR + "/hists/data.root",
-        background=WORKDIR + "/hists/background.root",
+        signal=f"{WORKDIR}/hists/signal.root",
+        data=f"{WORKDIR}/hists/data.root",
+        background=f"{WORKDIR}/hists/background.root",
     output:
-        WORKDIR + "/hists/data_bkg_signal.root",
+        temp(f"{WORKDIR}/hists/data_bkg_signal.root"),
+    log:
+        "logs/merge_analysis_histograms.log",
     container:
         config["containers"]["root"]
     shell:
         """
-        source /usr/local/bin/thisroot.sh
-        hadd -f {output} {input.signal} {input.data} {input.background}
+        (
+            source /usr/local/bin/thisroot.sh
+            hadd -f {output:q} {input.signal:q} {input.data:q} {input.background:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule make_workspace:
     input:
-        histograms=WORKDIR + "/hists/data_bkg_signal.root",
+        histograms=f"{WORKDIR}/hists/data_bkg_signal.root",
+        source_config="workflow/config.yaml",
+        script="code/makews.py",
     output:
         workspace="results/workspace_combined_meas_model.root",
         xml=directory("xmldir"),
+    params:
+        model_config=MODEL_CONFIG,
+    log:
+        "logs/make_workspace.log",
     container:
         config["containers"]["analysis"]
     shell:
         """
-        workspace_prefix="{output.workspace}"
-        workspace_prefix="${{workspace_prefix%_combined_meas_model.root}}"
-        mkdir -p "$(dirname {output.workspace})" {output.xml}
-        source /usr/local/bin/thisroot.sh
-        python code/makews.py {input.histograms} "$workspace_prefix" {output.xml}
+        (
+            workspace_prefix={output.workspace:q}
+            workspace_prefix="${{workspace_prefix%_combined_meas_model.root}}"
+            mkdir -p "$(dirname {output.workspace:q})" {output.xml:q}
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.histograms:q} "$workspace_prefix" {output.xml:q} {params.model_config:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
@@ -415,32 +623,45 @@ rule plot:
         fit_results="plot/fit_results.yml",
         prefit="plot/prefit.pdf",
         postfit="plot/postfit.pdf",
+    params:
+        components=PLOT_COMPONENTS,
+    log:
+        "logs/plot.log",
     container:
         config["containers"]["analysis"]
     shell:
         """
-        mkdir -p plot
-        source /usr/local/bin/thisroot.sh
-        hfquickplot write-vardef {input.workspace} combined {output.nominal_vals}
-        hfquickplot plot-channel {input.workspace} combined channel1 x {output.nominal_vals} -c qcd,mc2,mc1,signal -o {output.prefit}
-        hfquickplot fit {input.workspace} combined {output.fit_results}
-        hfquickplot plot-channel {input.workspace} combined channel1 x {output.fit_results} -c qcd,mc2,mc1,signal -o {output.postfit}
+        (
+            mkdir -p plot
+            source /usr/local/bin/thisroot.sh
+            hfquickplot write-vardef {input.workspace:q} combined {output.nominal_vals:q}
+            hfquickplot plot-channel {input.workspace:q} combined channel1 x {output.nominal_vals:q} -c {params.components:q} -o {output.prefit:q}
+            hfquickplot fit {input.workspace:q} combined {output.fit_results:q}
+            hfquickplot plot-channel {input.workspace:q} combined channel1 x {output.fit_results:q} -c {params.components:q} -o {output.postfit:q}
+        ) 2>&1 | tee {log:q}
         """
 
 
 rule hepdata:
     input:
         workspace="results/workspace_combined_meas_model.root",
+        script="code/hepdata_export.py",
     output:
         zip="hepdata/submission.zip",
         submission="hepdata/submission.yaml",
         data="hepdata/data1.yaml",
+    params:
+        model_config=MODEL_CONFIG,
+    log:
+        "logs/hepdata.log",
     container:
         config["containers"]["analysis"]
     shell:
         """
-        mkdir -p hepdata
-        source /usr/local/bin/thisroot.sh
-        python code/hepdata_export.py {input.workspace} {output.submission} {output.data}
-        zip -j {output.zip} {output.submission} {output.data}
+        (
+            mkdir -p hepdata
+            source /usr/local/bin/thisroot.sh
+            python {input.script:q} {input.workspace:q} {output.submission:q} {output.data:q} {params.model_config:q}
+            zip -j {output.zip:q} {output.submission:q} {output.data:q}
+        ) 2>&1 | tee {log:q}
         """

@@ -1,6 +1,7 @@
 .pixi/
 .snakemake/
 hepdata/
+logs/
 plot/
 results/
 work/

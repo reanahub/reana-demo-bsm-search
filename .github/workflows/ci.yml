@@ -31,8 +31,10 @@ jobs:
           pip install reana-client
           pip install reana-commons
 
-      - name: Validate Snakemake workflow DAG
-        run: pixi run snakemake-dry-run
+      - name: Validate Snakemake workflow
+        run: |
+          pixi run snakemake-lint
+          pixi run snakemake-dry-run
 
       - name: Build analysis environment image
         run:
