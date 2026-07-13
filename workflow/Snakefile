@@ -20,12 +20,16 @@ def shell_with_directories(command):
     executor restores the standard Snakemake behaviour.
 
     The original ROOT 6.18 images also require thisroot.sh before ROOT, PyROOT,
-    hadd, or hftools is used. This setup belongs to the workload environment; it
-    is independent of the Python environment in which Snakemake itself runs.
+    hadd, or hftools is used. That legacy script reads optional environment
+    variables without guarding against unset values, so temporarily disable
+    Snakemake's Bash nounset mode while sourcing it. The rest of each rule still
+    runs under Snakemake's strict `set -euo pipefail` defaults.
     """
     return (
         f"mkdir -p $(dirname {{output:q}}) $(dirname {{log:q}})\n"
+        "set +u\n"
         "source /usr/local/bin/thisroot.sh\n"
+        "set -u\n"
         f"{command}"
     )
 

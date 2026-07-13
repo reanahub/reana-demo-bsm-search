@@ -269,6 +269,13 @@ The workflow uses several common Snakemake features:
   This is safer and more storage-efficient than a manually ordered cleanup
   stage.
 
+Snakemake executes Bash rules in strict mode (`set -euo pipefail`). The legacy
+ROOT 6.18 `thisroot.sh` script reads optional environment variables as though
+they were always defined, which is incompatible with `set -u`. The centralized
+shell wrapper therefore disables only `nounset` while sourcing `thisroot.sh` and
+immediately restores it for the analysis command. Error handling and pipeline
+failure detection remain enabled throughout.
+
 #### The Data Workflow
 
 The subworkflow generating and processing the "observed data" goes through these
