@@ -1,5 +1,3 @@
-import hashlib
-import json
 import math
 import re
 
@@ -8,60 +6,30 @@ configfile: "workflow/config.yaml"
 
 WORKDIR = config["workdir"]
 BACKGROUND_SAMPLES = list(config["backgrounds"])
-SYSTEMATICS = config["systematics"]
-RANDOM_SEED = config["random_seed"]
+SHAPE_VARIATIONS = config["shape_variations"]
+WEIGHT_VARIATIONS = config["weight_variations"]
 
 
 def shell_with_directories(command):
-    """Prepare output and log parents before a remote REANA job starts.
+    """Prepare remote-job directories and initialise the legacy ROOT image.
 
     Snakemake normally creates these directories before executing a shell rule.
     REANA's Snakemake 9 remote executor currently submits the raw command
     without that preparation, so each remote job must perform it itself. Keep
     this compatibility wrapper centralized so it can be removed once the
     executor restores the standard Snakemake behaviour.
+
+    The original ROOT 6.18 images also require thisroot.sh before ROOT, PyROOT,
+    hadd, or hftools is used. This setup belongs to the workload environment; it
+    is independent of the Python environment in which Snakemake itself runs.
     """
     return (
         f"mkdir -p $(dirname {{output:q}}) $(dirname {{log:q}})\n"
+        "source /usr/local/bin/thisroot.sh\n"
         f"{command}"
     )
 
 
-def systematic_variations(systematic_type):
-    return [
-        variation["name"]
-        for systematic in SYSTEMATICS[systematic_type].values()
-        for variation in (systematic["up"], systematic["down"])
-    ]
-
-
-def variation_definitions():
-    definitions = {}
-    for variation_type, systematics in SYSTEMATICS.items():
-        for systematic in systematics.values():
-            for variation in (systematic["up"], systematic["down"]):
-                name = variation["name"]
-                if name in definitions:
-                    raise ValueError(f"Duplicate systematic variation name: {name}")
-                shift = variation.get("shift")
-                if shift is not None and shift[0] > shift[1]:
-                    raise ValueError(
-                        f"Invalid shift range for {name}: {shift}"
-                    )
-                definitions[name] = {
-                    "type": variation_type,
-                    **{
-                        key: value
-                        for key, value in variation.items()
-                        if key != "name"
-                    },
-                }
-    return definitions
-
-
-SHAPE_VARIATIONS = systematic_variations("shape")
-WEIGHT_VARIATIONS = ["nominal", *systematic_variations("weight")]
-VARIATION_CONFIG = json.dumps(variation_definitions(), sort_keys=True)
 SHAPE_VARIATION_PATTERN = (
     "|".join(map(re.escape, SHAPE_VARIATIONS)) or r"(?!)"
 )
@@ -70,47 +38,6 @@ SAMPLE_PATTERN = "|".join(
 )
 BACKGROUND_PATTERN = "|".join(map(re.escape, BACKGROUND_SAMPLES))
 PLOT_COMPONENTS = ",".join(["qcd", *reversed(BACKGROUND_SAMPLES), "signal"])
-DATA_FRACTION_SUM = config["data"]["qcd_fraction"] + sum(
-    sample["data_fraction"] for sample in config["backgrounds"].values()
-)
-if not math.isclose(DATA_FRACTION_SUM, 1.0, rel_tol=0.0, abs_tol=1e-9):
-    raise ValueError(
-        "Background data fractions and data.qcd_fraction must sum to 1, "
-        f"but sum to {DATA_FRACTION_SUM}"
-    )
-
-MODEL_CONFIG = json.dumps(
-    {
-        "backgrounds": BACKGROUND_SAMPLES,
-        "systematics": SYSTEMATICS,
-    },
-    sort_keys=True,
-)
-GENERATOR_CONFIG = json.dumps(
-    {
-        "samples": {
-            **{
-                sample: sample_config["generator"]
-                for sample, sample_config in config["backgrounds"].items()
-            },
-            "qcd": config["data"]["qcd_generator"],
-            "sig": config["signal"]["generator"],
-        },
-        "data": {
-            "control_region_fraction": config["data"][
-                "control_region_fraction"
-            ],
-            "signal_region_composition": {
-                **{
-                    sample: sample_config["data_fraction"]
-                    for sample, sample_config in config["backgrounds"].items()
-                },
-                "qcd": config["data"]["qcd_fraction"],
-            },
-        },
-    },
-    sort_keys=True,
-)
 
 GENERATED_BATCH_SIZE = {
     "data": 6,
@@ -129,14 +56,6 @@ def generated_count(sample):
 
 def generated_batches(sample):
     return range(math.ceil(generated_count(sample) / GENERATED_BATCH_SIZE[sample]))
-
-
-def derived_seed(*parts):
-    """Derive a stable job-specific seed, or disable seeding with -1."""
-    if RANDOM_SEED < 0:
-        return -1
-    seed_material = ":".join(map(str, (RANDOM_SEED, *parts))).encode()
-    return int.from_bytes(hashlib.sha256(seed_material).digest()[:4], "big")
 
 
 def generated_files_for_batch(wildcards):
@@ -206,10 +125,6 @@ rule generate:
     params:
         gentype=generator_type,
         nevents=nevents_for_chunk,
-        generator_config=GENERATOR_CONFIG,
-        seed=lambda wildcards: derived_seed(
-            "generate", wildcards.sample, wildcards.chunk
-        ),
     log:
         "logs/generate/{sample}/{chunk}.log",
     container:
@@ -217,7 +132,7 @@ rule generate:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {params.gentype:q} {params.nevents} {output:q} {params.seed} {params.generator_config:q}
+            python {input.script:q} {params.gentype:q} {params.nevents} {output:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -254,7 +169,7 @@ rule select_data:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {input.data:q} {output:q} {wildcards.region:q} {params.variations:q}
+            python {input.script:q} {input.data:q} {output:q} {wildcards.region:q} {params.variations:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -295,7 +210,7 @@ rule histogram_data:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
+            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -333,7 +248,7 @@ rule select_signal:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {input.data:q} {output:q} signal {params.variations:q}
+            python {input.script:q} {input.data:q} {output:q} signal {params.variations:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -372,7 +287,7 @@ rule histogram_signal:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
+            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -385,7 +300,6 @@ rule select_background_weight_variations:
         temp(f"{WORKDIR}/selected/{{sample}}/weights/batch{{batch}}.root"),
     params:
         variations=",".join(WEIGHT_VARIATIONS),
-        variation_config=VARIATION_CONFIG,
     log:
         "logs/select_background_weights/{sample}/batch{batch}.log",
     container:
@@ -395,7 +309,7 @@ rule select_background_weight_variations:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {input.data:q} {output:q} signal {params.variations:q} -1 {params.variation_config:q}
+            python {input.script:q} {input.data:q} {output:q} signal {params.variations:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -437,7 +351,7 @@ rule histogram_background_weights:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {input.data:q} {output:q} {wildcards.sample:q} {params.weight} {params.variations:q}
+            python {input.script:q} {input.data:q} {output:q} {wildcards.sample:q} {params.weight} {params.variations:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -450,14 +364,6 @@ rule select_background_shape_variation:
         temp(
             f"{WORKDIR}/selected/{{sample}}/{{shapevar}}/batch{{batch}}.root"
         ),
-    params:
-        seed=lambda wildcards: derived_seed(
-            "shape",
-            wildcards.sample,
-            wildcards.shapevar,
-            wildcards.batch,
-        ),
-        variation_config=VARIATION_CONFIG,
     log:
         "logs/select_background_shape/{sample}/{shapevar}/batch{batch}.log",
     container:
@@ -467,7 +373,7 @@ rule select_background_shape_variation:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {input.data:q} {output:q} signal {wildcards.shapevar:q} {params.seed} {params.variation_config:q}
+            python {input.script:q} {input.data:q} {output:q} signal {wildcards.shapevar:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -511,7 +417,7 @@ rule histogram_background_shape:
     shell:
         shell_with_directories("""
         (
-            python3 {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q} {params.template:q}
+            python {input.script:q} {input.data:q} {output:q} {params.name:q} {params.weight} {params.variations:q} {params.template:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -584,13 +490,10 @@ rule merge_analysis_histograms:
 rule make_workspace:
     input:
         histograms=f"{WORKDIR}/hists/data_bkg_signal.root",
-        source_config="workflow/config.yaml",
         script="code/makews.py",
     output:
         workspace="results/workspace_combined_meas_model.root",
         xml=directory("xmldir"),
-    params:
-        model_config=MODEL_CONFIG,
     log:
         "logs/make_workspace.log",
     container:
@@ -601,7 +504,7 @@ rule make_workspace:
             workspace_prefix={output.workspace:q}
             workspace_prefix="${{workspace_prefix%_combined_meas_model.root}}"
             mkdir -p "$(dirname {output.workspace:q})" {output.xml:q}
-            python3 {input.script:q} {input.histograms:q} "$workspace_prefix" {output.xml:q} {params.model_config:q}
+            python {input.script:q} {input.histograms:q} "$workspace_prefix" {output.xml:q}
         ) 2>&1 | tee {log:q}
         """)
 
@@ -640,8 +543,6 @@ rule hepdata:
         zip="hepdata/submission.zip",
         submission="hepdata/submission.yaml",
         data="hepdata/data1.yaml",
-    params:
-        model_config=MODEL_CONFIG,
     log:
         "logs/hepdata.log",
     container:
@@ -650,7 +551,7 @@ rule hepdata:
         shell_with_directories("""
         (
             mkdir -p hepdata
-            python3 {input.script:q} {input.workspace:q} {output.submission:q} {output.data:q} {params.model_config:q}
+            python {input.script:q} {input.workspace:q} {output.submission:q} {output.data:q}
             zip -j {output.zip:q} {output.submission:q} {output.data:q}
         ) 2>&1 | tee {log:q}
         """)

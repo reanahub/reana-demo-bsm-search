@@ -4,11 +4,11 @@ additionalProperties: false
 required:
   - containers
   - workdir
-  - random_seed
   - data
   - signal
   - backgrounds
-  - systematics
+  - weight_variations
+  - shape_variations
 properties:
   containers:
     type: object
@@ -24,51 +24,42 @@ properties:
   workdir:
     type: string
     minLength: 1
-  random_seed:
-    type: integer
-    minimum: -1
   data:
     type: object
     additionalProperties: false
-    required:
-      - nevents
-      - qcd_transfer_factor
-      - control_region_fraction
-      - qcd_fraction
-      - qcd_generator
+    required: [nevents, qcd_transfer_factor]
     properties:
       nevents:
         $ref: "#/$defs/event_chunks"
       qcd_transfer_factor:
         type: number
         exclusiveMinimum: 0
-      control_region_fraction:
-        $ref: "#/$defs/fraction"
-      qcd_fraction:
-        $ref: "#/$defs/fraction"
-      qcd_generator:
-        $ref: "#/$defs/generator"
   signal:
     $ref: "#/$defs/simulated_sample"
   backgrounds:
     type: object
-    minProperties: 1
-    propertyNames:
-      allOf:
-        - pattern: "^[A-Za-z][A-Za-z0-9_]*$"
-        - not:
-            enum: [data, signal, qcd]
-    additionalProperties:
-      $ref: "#/$defs/background_sample"
-  systematics:
-    type: object
     additionalProperties: false
-    required: [weight, shape]
+    required: [mc1, mc2]
     properties:
-      weight:
-        $ref: "#/$defs/weight_systematic_group"
-      shape:
-        $ref: "#/$defs/shape_systematic_group"
+      mc1:
+        $ref: "#/$defs/simulated_sample"
+      mc2:
+        $ref: "#/$defs/simulated_sample"
+  weight_variations:
+    type: array
+    minItems: 3
+    maxItems: 3
+    prefixItems:
+      - const: nominal
+      - const: weight_var1_up
+      - const: weight_var1_dn
+  shape_variations:
+    type: array
+    minItems: 2
+    maxItems: 2
+    prefixItems:
+      - const: shape_conv_up
+      - const: shape_conv_dn
 $defs:
   event_chunks:
     type: array
@@ -79,92 +70,10 @@ $defs:
   simulated_sample:
     type: object
     additionalProperties: false
-    required: [nevents, weight, generator]
+    required: [nevents, weight]
     properties:
       nevents:
         $ref: "#/$defs/event_chunks"
       weight:
         type: number
         exclusiveMinimum: 0
-      generator:
-        $ref: "#/$defs/generator"
-  background_sample:
-    type: object
-    additionalProperties: false
-    required: [nevents, weight, generator, data_fraction]
-    properties:
-      nevents:
-        $ref: "#/$defs/event_chunks"
-      weight:
-        type: number
-        exclusiveMinimum: 0
-      generator:
-        $ref: "#/$defs/generator"
-      data_fraction:
-        $ref: "#/$defs/fraction"
-  generator:
-    type: object
-    additionalProperties: false
-    required: [loc, scale]
-    properties:
-      loc:
-        type: number
-      scale:
-        type: number
-        exclusiveMinimum: 0
-  fraction:
-    type: number
-    minimum: 0
-    maximum: 1
-  weight_systematic_group:
-    type: object
-    propertyNames:
-      pattern: "^[A-Za-z][A-Za-z0-9_]*$"
-    additionalProperties:
-      type: object
-      additionalProperties: false
-      required: [up, down]
-      properties:
-        up:
-          $ref: "#/$defs/weight_variation"
-        down:
-          $ref: "#/$defs/weight_variation"
-  shape_systematic_group:
-    type: object
-    propertyNames:
-      pattern: "^[A-Za-z][A-Za-z0-9_]*$"
-    additionalProperties:
-      type: object
-      additionalProperties: false
-      required: [up, down]
-      properties:
-        up:
-          $ref: "#/$defs/shape_variation"
-        down:
-          $ref: "#/$defs/shape_variation"
-  weight_variation:
-    type: object
-    additionalProperties: false
-    required: [name, factor]
-    properties:
-      name:
-        $ref: "#/$defs/variation_name"
-      factor:
-        type: number
-        minimum: 0
-  shape_variation:
-    type: object
-    additionalProperties: false
-    required: [name, shift]
-    properties:
-      name:
-        $ref: "#/$defs/variation_name"
-      shift:
-        type: array
-        minItems: 2
-        maxItems: 2
-        items:
-          type: number
-  variation_name:
-    type: string
-    pattern: "^[A-Za-z][A-Za-z0-9_]*$"

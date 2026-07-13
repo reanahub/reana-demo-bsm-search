@@ -78,10 +78,10 @@ replace it with custom Draft 7 validation, because that would replace the
 standard Snakemake idiom with project-specific validation code and conceal the
 invalid REANA prerelease dependency combination.
 
-REANA's Snakemake 9 remote executor also currently submits each rule's raw
-shell command without first creating the parent directories of its outputs and
-logs. The Snakefile temporarily wraps shell commands with directory preparation
-in `shell_with_directories()`. This should be removed when the executor performs
+REANA's Snakemake 9 remote executor also currently submits each rule's raw shell
+command without first creating the parent directories of its outputs and logs.
+The Snakefile temporarily wraps shell commands with directory preparation in
+`shell_with_directories()`. This should be removed when the executor performs
 Snakemake's normal pre-job directory preparation.
 
 This requires a fix in
@@ -106,6 +106,9 @@ is separate from the `jsonschema` dependency conflict and should be fixed in
 REANA's Snakemake integration.
 
 On 2026-07-12, the complete workflow ran successfully on REANA QA as
-`reana-demo-bsm-snakemake-20260712-133953.3`, using `reana-client==0.95.0a5`
-and REANA server `0.95.0a6`. All 62 executable jobs finished, and the resulting
+`reana-demo-bsm-snakemake-20260712-133953.3`, using `reana-client==0.95.0a5` and
+REANA server `0.95.0a6`. All 62 executable jobs finished, and the resulting
 prefit and postfit PDFs and HEPData ZIP archive were downloaded and verified.
+That run used the later Python 3 analysis image; it validates the REANA and
+Snakemake integration issues described here, but not the legacy workload images
+selected by the `snakemake-old` branch.

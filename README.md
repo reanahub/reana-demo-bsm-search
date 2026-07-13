@@ -23,6 +23,9 @@ output of the workflow.
 
 This example uses the [ROOT](https://root.cern.ch/) data analysis framework and
 [Snakemake](https://snakemake.readthedocs.io/) computational workflow engine.
+The migration deliberately keeps the original analysis code and workload
+containers unchanged, so that the example isolates how a Yadage workflow is
+expressed using Snakemake 9.
 
 ## Analysis structure
 
@@ -49,9 +52,10 @@ using the experiment-internal software stack (e.g. CMSSW or the ATLAS Analysis
 Releases) and be based on C++ with many dependencies and require multiple
 container images. In this emulation we have two container images.
 
-1. The ROOT6 image `ghcr.io/clelange/root` is used for merging ROOT files.
-1. The image `ghcr.io/clelange/reana-demo-bsm-search` extends the same ROOT6
-   image with the `hftools` package. It is used for generation, selection,
+1. The ROOT6 image `docker.io/reanahub/reana-env-root6:6.18.04` is used for
+   merging ROOT files.
+1. The image `docker.io/reanahub/reana-demo-bsm-search:1.0.0` extends that ROOT6
+   environment with the `hftools` package. It is used for generation, selection,
    histogramming, fitting, plotting, and exporting to HEPData.
 
 #### [generantuple.py](code/generantuple.py) - Generating Toy Data
@@ -59,7 +63,7 @@ container images. In this emulation we have two container images.
 This script generates toy datasets needed for the analysis. The script has the
 command line interface
 
-`python3 code/generantuple.py {type} {nevents} {outputfile} [seed] [configfile]`,
+`python code/generantuple.py {type} {nevents} {outputfile}`,
 
 where `{type}` can be one of `[data, mc1, mc2, qcd, sig]` generating "observed
 data", two background processes "mc1" or "mc2", a "multijet-background" and
@@ -69,11 +73,6 @@ of the other three processes according to their respective cross sections.
 The dataset which is a collection of "events" (the number of events is
 controlled by the `{nevents}` parameters) which is stored in a ROOT TNtuple at
 the path indicated by `{outputfilename}`.
-
-The optional seed makes the generated events reproducible. Omitting it, or
-passing `-1`, uses Python's non-deterministic default seeding. The optional
-configuration file supplies the toy distributions and observed-data mixture;
-omitting it preserves the original `mc1` and `mc2` defaults.
 
 Since dataset generation is easily parallelizable, ultimately we will run many
 of these jobs at the same time and merge the TNtuples via ROOT's `hadd` utility.
@@ -86,7 +85,7 @@ events. In a real analysis this would be the bulk of the analysis code
 implemented in a C++ experiment framework. In this example, the cli structure of
 the script is
 
-`python3 code/select.py {inputfile} {outputfile} {region} var1,var2,... [seed] [configfile]`
+`python code/select.py {inputfile} {outputfile} {region} var1,var2,...`
 
 where an input and output files are specified as well as the region (i.e. either
 signal or control region) and a number of comma-delimited systematic variations
@@ -96,37 +95,30 @@ case only variations that affect the event selection need to be specified.
 Variations that only affect the event weights are dealt with in the
 histogramming step (see below).
 
-The seed is optional here as well. It affects the random shifts applied by shape
-variations. The optional configuration supplies the weight factors and shape
-shift ranges; omitting it preserves the original systematic definitions.
-
 #### [histogram.py](code/histogram.py) - Summarize Events in histograms
 
 This script reads in the TNtuple of the selected events and creates the required
 histograms for building the statistical model and weights them to a specific
 luminosity. The command structure is
 
-`python3 code/histogram.py {inputfile} {outputfile} {name} {weight} var,var2,...`
+`python code/histogram.py {inputfile} {outputfile} {name} {weight} var,var2,...`
 
 the variations in this case are weight-only variations.
 
 #### [makews.py](code/makews.py) - Building a Statistical Model
 
 This script creates a `RooWorkspace` using the HistFactory p.d.f template. The
-HistFactory configuration has a single channel containing observed data, a
-data-driven QCD estimate, the configured simulated backgrounds, and a signal.
-The parameter of interest is the normalization of the signal sample (the signal
-strength). For fitting and plotting the resulting workspace we use an external
-package called `hftools` (HistFactory tools), which provides command line tools
-for these purposes. The command line structure is
+HistFactory configuration has a single channel and four samples: QCD, MC1, MC2,
+and signal. The parameter of interest is the normalization of the signal sample
+(the signal strength). For fitting and plotting the resulting workspace we use
+an external package called `hftools` (HistFactory tools), which provides command
+line tools for these purposes. The command line structure is
 
-`python3 code/makews.py {data_bkg_hists} {workspace_prefix} {xml_dir} [configfile]`
+`python code/makews.py {data_bkg_hists} {workspace_prefix} {xml_dir}`
 
 The script expects all data and background histograms to be collected in a
 single ROOT file and writes the XML configuration and workspace to the paths
-specified on the command line. When a configuration file is supplied, the
-background samples and their systematic variations are read from it. Omitting
-the configuration preserves the original `mc1` and `mc2` defaults.
+specified on the command line.
 
 #### [hepdata_export.py](code/hepdata_export.py) - Preparing a HepData submission
 
@@ -137,10 +129,7 @@ functions to generated HepData tables from a `RooWorkspace`.
 
 The command line structure is:
 
-`python3 code/hepdata_export.py {combined_model} [submission] [data] [configfile]`
-
-The optional configuration makes the exported sample list follow the configured
-backgrounds. Omitting it preserves the original `mc1` and `mc2` defaults.
+`python code/hepdata_export.py {combined_model} [submission] [data]`
 
 ### 3. Compute environment
 
@@ -149,60 +138,54 @@ need to "encapsulate the current compute environment", for example to freeze the
 ROOT version our analysis is using. We shall achieve this by preparing a
 [Docker](https://www.docker.com/) container image for our analysis steps.
 
-Some analysis steps only need a [ROOT](https://root.cern.ch/) environment. This
-workflow uses `ghcr.io/clelange/root:6.38.04-ubuntu24.04`, which provides ROOT,
-PyROOT, and Python 3.12 for Linux AMD64.
+Snakemake and the analysis commands run in separate environments. REANA runs
+Snakemake 9, with its own Python, in the workflow-engine environment. Each rule
+then runs its shell command in the container declared by that rule.
+Consequently, Snakemake 9 can orchestrate these original ROOT 6.18 and Python 2
+workloads; the Python versions do not need to match.
 
-Other tasks also need the `hftools` Python library. The PyPI release was written
-for Python 2, so the environment installs a
-[minimal Python 3 compatibility fork](https://github.com/clelange/hftools/tree/feat/python3-compatibility)
-from an immutable commit. The analysis code itself is not copied into the image:
-Snakemake and REANA provide it through the workflow workspace. This keeps code
-changes separate from environment changes.
+Some analysis steps only need the existing
+[`reana-env-root6`](https://github.com/reanahub/reana-env-root6) image. Other
+steps also need the original `hftools` Python package and the analysis code. The
+analysis image extends the same ROOT 6.18 environment for those steps:
 
 ```console
 $ less environments/reana-demo-bsm-search/Dockerfile
 ```
 
 ```Dockerfile
-FROM ghcr.io/clelange/root:6.38.04-ubuntu24.04@sha256:e2e6e95b610ac79cc6591920c1adc172a36ed04d903226c8f5d7826c6ef96dd4
+FROM docker.io/reanahub/reana-env-root6:6.18.04
 
-RUN apt-get update && \
-    apt-get install --no-install-recommends -y python3-venv zip && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get -y update && \
+    apt-get -y install libyaml-dev python-numpy zip && \
+    apt-get autoremove -y && \
+    apt-get clean -y
+RUN pip install hftools==0.0.6
 
-RUN python3 -m venv --system-site-packages /opt/reana-venv
-ENV PATH="/opt/reana-venv/bin:${PATH}"
-
-RUN python3 -m pip install --no-cache-dir \
-    "hftools @ https://github.com/clelange/hftools/archive/bbd0410f7106aa591ae01f11cfbc942b5fcddf85.tar.gz" \
-    "brewer2mpl==1.4.1" \
-    "click==8.4.2"
+ADD code /code
+WORKDIR /code
 ```
+
+The unchanged Dockerfile still embeds a copy of `code`. The Snakefile
+nevertheless declares each script as a named input and executes the workspace
+copy. This records the real file dependency, makes the command readable, and
+keeps the same command usable manually from the repository root.
 
 We can build our analysis environment image and give it a name
-`ghcr.io/clelange/reana-demo-bsm-search`:
+`docker.io/reanahub/reana-demo-bsm-search`:
 
 ```console
-$ docker buildx build --platform linux/amd64 \
-    -f environments/reana-demo-bsm-search/Dockerfile \
-    -t ghcr.io/clelange/reana-demo-bsm-search:2.0.0 \
-    --load .
+$ docker build -f environments/reana-demo-bsm-search/Dockerfile \
+    -t docker.io/reanahub/reana-demo-bsm-search:1.0.0 .
 ```
 
-After testing it locally, push the image to GHCR:
+The published image is referenced directly by the workflow. If it is rebuilt
+under another registry account, update `containers.analysis` in
+`workflow/config.yaml` before pushing it:
 
 ```console
-$ docker push ghcr.io/clelange/reana-demo-bsm-search:2.0.0
+$ docker push docker.io/your-account/reana-demo-bsm-search:1.0.0
 ```
-
-The OCI source label in the Dockerfile associates the image with this GitHub
-repository. It is set explicitly because Docker images inherit labels from
-their base image; without the override, GHCR would associate this image with
-the repository that built the ROOT base image.
-
-When publishing from an ARM-based development machine, keep
-`--platform linux/amd64`: REANA QA executes AMD64 images.
 
 ### 4. Analysis workflow
 
@@ -343,12 +326,12 @@ histograms events (with a couple of merge stages in between).
 
 #### Putting everything together
 
-The [configuration file](workflow/config.yaml) defines event chunks, sample
-weights, containers, systematic variations, and the base random seed. Its
-expected structure is documented by
-[config.schema.yaml](workflow/config.schema.yaml). Automatic schema validation
-inside the Snakefile is temporarily disabled for REANA; see the compatibility
-note below.
+The [configuration file](workflow/config.yaml) defines the workflow-level event
+chunks, sample weights, container images, and the names of the systematic
+variations implemented by the original analysis code. Its expected structure is
+documented by [config.schema.yaml](workflow/config.schema.yaml). Automatic
+schema validation inside the Snakefile is temporarily disabled for REANA; see
+the compatibility note below.
 
 The REANA 0.95 prerelease currently has a dependency conflict affecting this
 Snakemake 9 validation API. See the
@@ -357,57 +340,38 @@ reproduction and proposed upstream action.
 
 ```yaml
 containers:
-  analysis: docker://ghcr.io/clelange/reana-demo-bsm-search:2.0.0
-  root: docker://ghcr.io/clelange/root:6.38.04-ubuntu24.04
+  analysis: docker://docker.io/reanahub/reana-demo-bsm-search:1.0.0
+  root: docker://docker.io/reanahub/reana-env-root6:6.18.04
 
 workdir: work
-random_seed: 12345
 
 data:
   nevents: [20000, 20000, 20000, 20000, 20000]
   qcd_transfer_factor: 0.1875
-  control_region_fraction: 0.8
-  qcd_fraction: 0.75
-  qcd_generator: { loc: 5, scale: 4 }
 
 signal:
   nevents: [40000, 40000]
   weight: 0.0025
-  generator: { loc: 1, scale: 0.5 }
 
 backgrounds:
   mc1:
     nevents: [40000, 40000, 40000, 40000]
     weight: 0.01875
-    data_fraction: 0.15
-    generator: { loc: -3, scale: 1.5 }
+  mc2:
+    nevents: [40000, 40000, 40000, 40000]
+    weight: 0.0125
 
-systematics:
-  weight:
-    weight_var1:
-      up: { name: weight_var1_up, factor: 1.05 }
-      down: { name: weight_var1_dn, factor: 0.95 }
-  shape:
-    shape_conv:
-      up: { name: shape_conv_up, shift: [0, 1] }
-      down: { name: shape_conv_dn, shift: [-1, 0] }
+weight_variations: [nominal, weight_var1_up, weight_var1_dn]
+shape_variations: [shape_conv_up, shape_conv_dn]
 ```
 
-Background names are not hard-coded in the workflow, generator, or
-workspace-building script. Adding another entry below `backgrounds` creates its
-generation, selection, histogram, model, and plotting jobs. Its `generator`
-defines the toy normal distribution and `data_fraction` defines its contribution
-to observed data in the signal region. The background fractions together with
-`data.qcd_fraction` must sum to one. Each systematic is expressed as an explicit
-up/down pair. Weight variations define a multiplicative `factor`; shape
-variations define a uniformly sampled `shift` interval. These definitions are
-used both to create the variation histograms and to configure the HistFactory
-model.
-
-`random_seed` is a base seed rather than the seed passed to every job. The
-Snakefile derives a stable, distinct seed from the base seed and the job's
-sample, chunk, and variation. This makes results independent of scheduling
-order. Set it to `-1` to disable deterministic seeding.
+The `nevents` lists control both how many events each job generates and how many
+parallel jobs Snakemake creates. The sample names and systematic definitions are
+intentionally not generalised: `mc1`, `mc2`, `weight_var1`, and `shape_conv` are
+part of the unchanged analysis implementation. Keeping that scientific logic
+fixed makes the example about workflow-engine migration rather than analysis
+refactoring. The original scripts do not expose a random-seed argument, so this
+migration preserves their non-deterministic behaviour as well.
 
 #### Checking and visualising the workflow locally
 
