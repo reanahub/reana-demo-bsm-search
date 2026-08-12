@@ -1,0 +1,14 @@
+version: 0.9.3
+inputs:
+  files:
+    - Snakefile
+  directories:
+    - code
+workflow:
+  type: snakemake
+  file: Snakefile
+outputs:
+  files:
+    - plot/prefit.pdf
+    - plot/postfit.pdf
+    - hepdata/submission.zip

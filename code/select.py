@@ -30,6 +30,9 @@ def main():
     shape_vars =  [x for x in variations if 'shape_' in x]
     weight_vars = [x for x in variations if 'weight_' in x]
 
+    if shape_vars:
+        random.seed(int(sys.argv[5]))
+
     nominal = 'nominal' in variations
     if (nominal or weight_vars) and shape_vars:
         print('cannnot run shape variations together with nominal or weight variations')

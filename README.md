@@ -400,3 +400,56 @@ $ reana-client download
 Please see the [REANA-Client](https://reana-client.readthedocs.io/)
 documentation for more detailed explanation of typical `reana-client` usage
 scenarios.
+
+## Running the example with Snakemake
+
+Besides the Yadage workflow described above, this repository also includes an
+independently-written [Snakemake](https://snakemake.github.io/) port of the same
+analysis (`Snakefile`, `reana-snakemake.yaml`). It runs the same code against
+the same container images and produces the same outputs; only the workflow
+engine differs. See [docs/yadage-to-snakemake.md](docs/yadage-to-snakemake.md)
+for a stage-by-stage translation between the two, and
+[docs/snakemake-comparison.md](docs/snakemake-comparison.md) for a comparison
+against an independent Snakemake port done upstream.
+
+### Running locally
+
+The included [Pixi](https://pixi.sh/) environment provides a pinned Snakemake
+and Graphviz, without relying on whatever Python happens to be on your machine:
+
+```console
+$ pixi install
+$ # dry run
+$ pixi run snakemake-dry-run
+$ # lint the Snakefile
+$ pixi run snakemake-lint
+$ # regenerate the DAG image
+$ pixi run workflow-dag
+```
+
+The Pixi tasks above inspect the workflow but do not run its containerised ROOT
+jobs. On a Linux machine with Apptainer installed, the complete workflow can be
+run with:
+
+```console
+$ pixi run snakemake --cores 4 --software-deployment-method apptainer
+$ # quick test run (fewer generated events, for smoke-testing the pipeline)
+$ pixi run snakemake --cores 4 --software-deployment-method apptainer \
+    --config profile=test
+```
+
+### Running on REANA cloud
+
+Point `reana-client` at `reana-snakemake.yaml` instead of the default
+`reana.yaml`:
+
+```console
+$ reana-client create -n my-analysis -f reana-snakemake.yaml
+$ export REANA_WORKON=my-analysis
+$ reana-client upload
+$ reana-client start
+```
+
+Event generation and the shape-systematic variation in `code/select.py` are
+seeded deterministically from the sample name and batch index, so repeated runs
+of the workflow are reproducible.
