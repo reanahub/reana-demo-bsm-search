@@ -9,3 +9,4 @@ ws/
 plot/
 hepdata/
 logs/
+.condor_jobs/

@@ -1,0 +1,55 @@
+# Snakemake >=9 workflow profile for CERN lxbatch (HTCondor), used via:
+#   source activate-snakemake9.sh
+#   snakemake --workflow-profile lxbatch --config profile=test --cores 1
+#
+# This replaces the hand-rolled condor/submit.sh + status.sh + cancel.sh
+# wrappers (needed only because the lxplus venv's Snakemake predates the
+# executor-plugin system). The plugin owns submission, status polling, and
+# retry/cancel handling instead of us.
+executor: htcondor
+jobs: 5000
+max-jobs-per-second: 100
+max-status-checks-per-second: 100
+restart-times: 3
+local-cores: 4
+htcondor-jobdir: .condor_jobs
+# Worker nodes mount AFS directly, same as the submit host; this stops the
+# plugin from adding our own repo's inputs/outputs to transfer_input_files.
+htcondor-shared-fs-prefixes: /afs
+
+# Without this, the plugin forces should_transfer_files=YES, which makes
+# HTCondor copy the job's executable into an isolated per-job sandbox instead
+# of running it in place on the shared filesystem.
+shared-fs-usage:
+  - persistence
+  - software-deployment
+  - software-deployment-cache
+  - source-cache
+  - sources
+  - input-output
+  - storage-local-copies
+
+# Same container mechanism as before (--use-singularity/--singularity-prefix
+# on the old Snakemake), just invoked through the profile. Keep this prefix
+# off AFS: quota there is too small for the image cache. $EOS_HOME is set by
+# activate-snakemake9.sh (Snakemake profiles expand $VAR references).
+software-deployment-method: apptainer
+apptainer-prefix: $EOS_HOME/singularity_images
+
+default-resources:
+  - getenv=True
+  - htcondor_request_mem_mb=1024
+  - htcondor_request_disk_mb=2048
+  - classad_JobFlavour=espresso
+  # Our venv's python comes from the el9-specific LCG view; lxbatch also has
+  # el8 execute nodes, and that binary won't run there. Must be the bare
+  # "requirements" key, not "htcondor_submit_requirements" -- the
+  # htcondor_submit_ prefix auto-quotes string values, which breaks a
+  # boolean expression like this one.
+  - 'requirements=(OpSysAndVer =?= "AlmaLinux9")'
+  # HTCondor launching sys.executable (our venv's python, a symlink into the
+  # CVMFS LCG view) directly as the job's executable crashes on the worker
+  # ("Failed to import encodings module"); the same interpreter works fine
+  # invoked from inside a shell script instead. This wrapper also cds into
+  # the checkout, since the plugin never sets HTCondor's initialdir.
+  - job_wrapper=condor/htcondor-job-wrapper.sh
