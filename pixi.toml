@@ -1,0 +1,19 @@
+[workspace]
+name = "reana-demo-bsm-search"
+version = "0.1.0"
+description = "Snakemake tooling for reana-demo-bsm-search"
+authors = ["KyryloFilonenko"]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[tasks]
+snakemake-dry-run = "snakemake --dry-run --cores 1"
+snakemake-lint = "snakemake --lint"
+workflow-dag = "dot -c && snakemake --dry-run --dag --quiet | sed -n '/^digraph/,$p' | dot -Tpng > docs/snakemake-workflow.png"
+
+[dependencies]
+graphviz = "*"
+python = ">=3.12,<3.13"
+
+[pypi-dependencies]
+snakemake = ">=9,<10"

@@ -400,3 +400,78 @@ $ reana-client download
 Please see the [REANA-Client](https://reana-client.readthedocs.io/)
 documentation for more detailed explanation of typical `reana-client` usage
 scenarios.
+
+## Running the example with Snakemake
+
+Besides the Yadage workflow described above, this repository also includes an
+independently-written [Snakemake](https://snakemake.github.io/) port of the same
+analysis (`Snakefile`, `reana-snakemake.yaml`). It runs the same code against
+the same container images and produces the same outputs; only the workflow
+engine differs. See [docs/yadage-to-snakemake.md](docs/yadage-to-snakemake.md)
+for a stage-by-stage translation between the two, and
+[docs/snakemake-comparison.md](docs/snakemake-comparison.md) for a comparison
+against an independent Snakemake port done upstream.
+
+### Running locally
+
+The included [Pixi](https://pixi.sh/) environment provides a pinned Snakemake
+and Graphviz, without relying on whatever Python happens to be on your machine:
+
+```console
+$ pixi install
+$ # dry run
+$ pixi run snakemake-dry-run
+$ # lint the Snakefile
+$ pixi run snakemake-lint
+$ # regenerate the DAG image
+$ pixi run workflow-dag
+```
+
+The Pixi tasks above inspect the workflow but do not run its containerised ROOT
+jobs. On a Linux machine with Apptainer installed, the complete workflow can be
+run with:
+
+```console
+$ pixi run snakemake --cores 4 --software-deployment-method apptainer
+$ # quick test run (fewer generated events, for smoke-testing the pipeline)
+$ pixi run snakemake --cores 4 --software-deployment-method apptainer \
+    --config profile=test
+```
+
+### Running on REANA cloud
+
+Point `reana-client` at `reana-snakemake.yaml` instead of the default
+`reana.yaml`:
+
+```console
+$ reana-client create -n my-analysis -f reana-snakemake.yaml
+$ export REANA_WORKON=my-analysis
+$ reana-client upload
+$ reana-client start
+```
+
+### Running on an HTCondor batch farm
+
+For running on a shared HTCondor pool (such as CERN's lxbatch) instead of REANA,
+[profiles/lxbatch](profiles/lxbatch) holds a Snakemake workflow profile for the
+native
+[snakemake-executor-plugin-htcondor](https://github.com/htcondor/snakemake-executor-plugin-htcondor)
+executor, which submits, polls, and retries jobs itself instead of relying on
+hand-written wrapper scripts:
+
+```console
+$ source activate-snakemake9.sh
+$ snakemake --workflow-profile lxbatch --config profile=test --cores 1
+```
+
+`activate-snakemake9.sh` activates a Python virtual environment with Snakemake
+and the HTCondor plugin installed (Snakemake >=9 needs a newer Python than most
+batch nodes provide by default) and points it at the LCG software stack over
+CVMFS. `condor/` also keeps a classic
+`--cluster`/`--cluster-status`/`--cluster-cancel` wrapper
+(`submit.sh`/`status.sh`/`cancel.sh`) as a fallback for Snakemake versions
+without executor-plugin support.
+
+Event generation and the shape-systematic variation in `code/select.py` are
+seeded deterministically from the sample name and batch index, so repeated runs
+of the workflow are reproducible.

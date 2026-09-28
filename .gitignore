@@ -1,0 +1,12 @@
+.snakemake/
+generated/
+merged/
+merged_all/
+selected/
+hists/
+branch/
+ws/
+plot/
+hepdata/
+logs/
+.condor_jobs/
